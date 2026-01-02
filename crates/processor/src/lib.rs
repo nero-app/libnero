@@ -9,7 +9,7 @@ use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 use anyhow::bail;
 use axum::{Router, routing::get};
 use bytes::Bytes;
-use http::{Request, uri::Scheme};
+use http::uri::Scheme;
 use tokio::{net::TcpListener, sync::RwLock};
 use tracing::debug;
 use url::Url;
@@ -21,7 +21,13 @@ use crate::{
     utils::get_request_hash,
 };
 
-type HttpRequest = Request<Option<Bytes>>;
+type HttpRequest = http::Request<Option<Bytes>>;
+
+#[derive(Debug, Clone)]
+enum Request {
+    Http(Box<HttpRequest>),
+    MagnetUri(String),
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct CacheConfig {
@@ -36,9 +42,9 @@ struct ServerState {
     http_client: reqwest::Client,
 
     image_requests: Cache<u64, HttpRequest>,
-    video_requests: Cache<u64, HttpRequest>,
+    video_requests: Cache<u64, Request>,
 
-    current_video: RwLock<Option<HttpRequest>>,
+    current_video: RwLock<Option<Request>>,
 }
 
 pub struct Processor {
@@ -140,9 +146,13 @@ impl Processor {
 
         self.state
             .video_requests
-            .insert(request_hash, request)
+            .insert(request_hash, Request::Http(Box::new(request)))
             .await;
 
         Ok(base)
+    }
+
+    pub async fn register_manget_uri(&self, uri: String) -> anyhow::Result<Url> {
+        todo!()
     }
 }
