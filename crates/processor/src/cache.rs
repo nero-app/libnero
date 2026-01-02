@@ -27,11 +27,21 @@ impl<V> CacheEntry<V> {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Cache<K, V> {
     map: Arc<RwLock<HashMap<K, CacheEntry<V>>>>,
     ttl: Option<Duration>,
     max_capacity: Option<usize>,
+}
+
+impl<K, V> Default for Cache<K, V> {
+    fn default() -> Self {
+        Self {
+            map: Arc::new(RwLock::new(HashMap::new())),
+            ttl: None,
+            max_capacity: None,
+        }
+    }
 }
 
 impl<K, V> Cache<K, V>
