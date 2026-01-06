@@ -4,12 +4,19 @@ mod mime_detector;
 mod routes;
 mod utils;
 
-use std::{io, net::SocketAddr, sync::Arc, time::Duration};
+use std::{
+    hash::{DefaultHasher, Hash, Hasher},
+    io,
+    net::SocketAddr,
+    sync::Arc,
+    time::Duration,
+};
 
 use anyhow::bail;
 use axum::{Router, routing::get};
 use bytes::Bytes;
 use http::uri::Scheme;
+use librqbit::Session;
 use tokio::{net::TcpListener, sync::RwLock};
 use tracing::debug;
 use url::Url;
@@ -17,16 +24,25 @@ use url::Url;
 use crate::{
     cache::Cache,
     mime_detector::mime_type,
-    routes::{handle_image_request, handle_video_request},
+    routes::{handle_image_request, handle_torrent_request, handle_video_request},
     utils::get_request_hash,
 };
 
 type HttpRequest = http::Request<Option<Bytes>>;
 
 #[derive(Debug, Clone)]
-enum Request {
+pub enum TorrentSource {
     Http(Box<HttpRequest>),
     MagnetUri(String),
+}
+
+#[derive(Debug, Clone)]
+enum Request {
+    Http(Box<HttpRequest>),
+    Torrent {
+        source: TorrentSource,
+        files: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone, Default)]
@@ -39,7 +55,9 @@ pub struct CacheConfig {
 
 struct ServerState {
     addr: SocketAddr,
+
     http_client: reqwest::Client,
+    torrent_api: RwLock<Option<librqbit::Api>>,
 
     image_requests: Cache<u64, HttpRequest>,
     video_requests: Cache<u64, Request>,
@@ -60,6 +78,7 @@ impl Processor {
         let state = ServerState {
             addr,
             http_client: reqwest::Client::new(),
+            torrent_api: RwLock::new(None),
             image_requests: {
                 let mut cache = Cache::default();
                 if let Some(ttl) = cache_config.image_ttl {
@@ -92,11 +111,21 @@ impl Processor {
         let app = Router::new()
             .route("/image/{request_hash}", get(handle_image_request))
             .route("/video/{request_hash}", get(handle_video_request))
+            .route("/torrent/{request_hash}", get(handle_torrent_request))
             .with_state(self.state.clone());
 
         let listener = TcpListener::bind(self.state.addr).await?;
         debug!("listening on {}", listener.local_addr().unwrap());
         axum::serve(listener, app).await
+    }
+
+    pub async fn enable_torrent_support(&self, session: Arc<Session>) {
+        let api = librqbit::Api::new(session, None);
+        *self.state.torrent_api.write().await = Some(api);
+    }
+
+    pub async fn disable_torrent_support(&self) {
+        *self.state.torrent_api.write().await = None;
     }
 
     pub async fn register_image_request(&self, request: HttpRequest) -> anyhow::Result<Url> {
@@ -141,6 +170,9 @@ impl Processor {
 
         match mime_type.type_() {
             mime::VIDEO => base.set_path(&format!("/video/{request_hash}")),
+            mime::APPLICATION if mime_type.subtype() == "application/x-bittorrent" => {
+                bail!("Torrent file. Use register_torrent() instead.")
+            }
             _ => bail!("Unsupported media type"),
         }
 
@@ -152,7 +184,35 @@ impl Processor {
         Ok(base)
     }
 
-    pub async fn register_manget_uri(&self, uri: String) -> anyhow::Result<Url> {
+    pub async fn get_torrent_files(&self, source: TorrentSource) -> anyhow::Result<Vec<String>> {
         todo!()
+    }
+
+    pub async fn register_torrent(
+        &self,
+        source: TorrentSource,
+        files: Vec<String>,
+    ) -> anyhow::Result<Url> {
+        let request_hash = match &source {
+            TorrentSource::Http(request) => get_request_hash(request),
+            TorrentSource::MagnetUri(uri) => {
+                let mut hasher = DefaultHasher::new();
+                uri.hash(&mut hasher);
+                hasher.finish()
+            }
+        };
+
+        let url = Url::parse(&format!(
+            "{}://{}/torrent/{request_hash}",
+            Scheme::HTTP,
+            self.state.addr,
+        ))?;
+
+        self.state
+            .video_requests
+            .insert(request_hash, Request::Torrent { source, files })
+            .await;
+
+        Ok(url)
     }
 }

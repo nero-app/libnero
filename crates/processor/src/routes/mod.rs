@@ -1,14 +1,16 @@
 mod image;
+mod torrent;
 mod video;
 
+pub use image::*;
+pub use torrent::*;
+pub use video::*;
+
+use bytes::Bytes;
 use http::{
     HeaderMap, HeaderName,
     header::{CONNECTION, PROXY_AUTHENTICATE, PROXY_AUTHORIZATION, TE, TRANSFER_ENCODING, UPGRADE},
 };
-pub use image::*;
-pub use video::*;
-
-use bytes::Bytes;
 use reqwest::Client;
 use url::Url;
 

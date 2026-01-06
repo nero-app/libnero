@@ -13,6 +13,12 @@ pub enum Error {
 
     #[error("Remote server returned status {0}")]
     RemoteServer(StatusCode),
+
+    #[error("Torrent support is disabled")]
+    TorrentSupportDisabled,
+
+    #[error("Torrent API error: {0}")]
+    TorrentApi(#[from] librqbit::ApiError),
 }
 
 impl IntoResponse for Error {
@@ -26,6 +32,14 @@ impl IntoResponse for Error {
             Error::RemoteServer(code) => {
                 error!("Remote server returned status {}: {:#}", code, self);
                 StatusCode::BAD_GATEWAY
+            }
+            Error::TorrentSupportDisabled => {
+                error!("Torrent support is disabled: {:#}", self);
+                StatusCode::BAD_REQUEST
+            }
+            Error::TorrentApi(e) => {
+                error!("Torrent API error: {:#}", e);
+                StatusCode::BAD_REQUEST
             }
         };
 

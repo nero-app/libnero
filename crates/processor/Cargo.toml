@@ -8,6 +8,7 @@ anyhow = { workspace = true }
 axum = "0.8.6"
 bytes = { workspace = true }
 http = { workspace = true }
+librqbit = { workspace = true }
 mime = "0.3.17"
 mime_guess = "2.0.5"
 reqwest = { workspace = true, features = ["stream"] }
