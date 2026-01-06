@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = { workspace = true }
+librqbit = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true, features = ["fs"] }
 tracing = { workspace = true }
