@@ -1,7 +1,2 @@
-/crates/app/gen/schemas
-/crates/plugin-extensions/webview-dist
-/crates/plugin-extensions/permissions
-/node_modules/
-/nero-ui/dist/
 /target/
 /Cargo.lock
