@@ -1,9 +1,10 @@
 use anyhow::bail;
 use nero_extensions::types::MediaResource;
+use nero_processor::Processor;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::{PluginState, utils::AsyncTryFromWithState};
+use crate::utils::AsyncTryFromWithProcessor;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -12,17 +13,17 @@ pub struct Page<T> {
     has_next_page: bool,
 }
 
-impl<T, U> AsyncTryFromWithState<nero_extensions::types::Page<T>> for Page<U>
+impl<T, U> AsyncTryFromWithProcessor<nero_extensions::types::Page<T>> for Page<U>
 where
-    U: AsyncTryFromWithState<T>,
+    U: AsyncTryFromWithProcessor<T>,
 {
-    async fn async_try_from_with_state(
+    async fn async_try_from_with_processor(
         page: nero_extensions::types::Page<T>,
-        state: &PluginState,
+        processor: &Processor,
     ) -> anyhow::Result<Self> {
         let mut items = Vec::with_capacity(page.items.len());
         for item in page.items {
-            items.push(U::async_try_from_with_state(item, state).await?);
+            items.push(U::async_try_from_with_processor(item, processor).await?);
         }
         Ok(Self {
             items,
@@ -44,17 +45,17 @@ pub struct Series {
     r#type: Option<String>,
 }
 
-impl AsyncTryFromWithState<nero_extensions::types::Series> for Series {
-    async fn async_try_from_with_state(
+impl AsyncTryFromWithProcessor<nero_extensions::types::Series> for Series {
+    async fn async_try_from_with_processor(
         series: nero_extensions::types::Series,
-        state: &PluginState,
+        processor: &Processor,
     ) -> anyhow::Result<Self> {
         Ok(Self {
             id: series.id,
             title: series.title,
             poster_url: match series.poster_resource {
                 Some(MediaResource::HttpRequest(req)) => {
-                    Some(state.processor.register_image_request(*req).await?)
+                    Some(processor.register_image_request(*req).await?)
                 }
                 Some(MediaResource::MagnetUri(_)) => {
                     bail!("Magnet URIs are not supported for images");
@@ -77,10 +78,10 @@ pub struct Episode {
     description: Option<String>,
 }
 
-impl AsyncTryFromWithState<nero_extensions::types::Episode> for Episode {
-    async fn async_try_from_with_state(
+impl AsyncTryFromWithProcessor<nero_extensions::types::Episode> for Episode {
+    async fn async_try_from_with_processor(
         episode: nero_extensions::types::Episode,
-        state: &PluginState,
+        processor: &Processor,
     ) -> anyhow::Result<Self> {
         Ok(Self {
             id: episode.id,
@@ -88,7 +89,7 @@ impl AsyncTryFromWithState<nero_extensions::types::Episode> for Episode {
             title: episode.title,
             thumbnail_url: match episode.thumbnail_resource {
                 Some(MediaResource::HttpRequest(req)) => {
-                    Some(state.processor.register_image_request(*req).await?)
+                    Some(processor.register_image_request(*req).await?)
                 }
                 Some(MediaResource::MagnetUri(_)) => {
                     bail!("Magnet URIs are not supported for images");
@@ -109,16 +110,14 @@ pub struct Video {
     resolution: Resolution,
 }
 
-impl AsyncTryFromWithState<nero_extensions::types::Video> for Video {
-    async fn async_try_from_with_state(
+impl AsyncTryFromWithProcessor<nero_extensions::types::Video> for Video {
+    async fn async_try_from_with_processor(
         video: nero_extensions::types::Video,
-        state: &PluginState,
+        processor: &Processor,
     ) -> anyhow::Result<Self> {
         Ok(Self {
             url: match video.media_resource {
-                MediaResource::HttpRequest(req) => {
-                    state.processor.register_video_request(*req).await?
-                }
+                MediaResource::HttpRequest(req) => processor.register_video_request(*req).await?,
                 MediaResource::MagnetUri(_) => todo!("Implement torrent support"),
             },
             server: video.server,

@@ -4,3 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = { workspace = true }
+serde = { workspace = true }
+tokio = { workspace = true, features = ["fs"] }
+tracing = { workspace = true }
+url = { workspace = true, features = ["serde"] }
+nero-processor = { path = "../processor" }
+nero-extensions = { path = "../extensions" }
+wasm-metadata = { workspace = true }

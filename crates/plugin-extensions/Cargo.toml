@@ -8,12 +8,6 @@ links = "tauri-plugin-nero-extensions"
 tauri-plugin = { version = "2.5.1", features = ["build"] }
 
 [dependencies]
-anyhow = { workspace = true }
-serde = { workspace = true }
+libnero = { path = "../libnero" }
 tauri = { version = "2", default-features = false }
-tokio = { workspace = true, features = ["fs"] }
 tracing = { workspace = true }
-url = { workspace = true, features = ["serde"] }
-nero-processor = { path = "../processor" }
-nero-extensions = { path = "../extensions" }
-wasm-metadata = { workspace = true }
