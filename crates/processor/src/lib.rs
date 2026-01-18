@@ -12,11 +12,11 @@ use std::{
     time::Duration,
 };
 
-use anyhow::bail;
+use anyhow::{anyhow, bail};
 use axum::{Router, routing::get};
 use bytes::Bytes;
 use http::uri::Scheme;
-use librqbit::Session;
+use librqbit::{AddTorrent, AddTorrentOptions, Session};
 use tokio::{net::TcpListener, sync::RwLock};
 use tracing::debug;
 use url::Url;
@@ -185,7 +185,34 @@ impl Processor {
     }
 
     pub async fn get_torrent_files(&self, source: TorrentSource) -> anyhow::Result<Vec<String>> {
-        todo!()
+        let uri = match source {
+            TorrentSource::Http(request) => request.uri().to_string(),
+            TorrentSource::MagnetUri(uri) => uri,
+        };
+
+        let api_guard = self.state.torrent_api.read().await;
+        let torrent_api = api_guard
+            .as_ref()
+            .ok_or(anyhow!("torrent support is not enabled."))?;
+
+        let options = AddTorrentOptions {
+            overwrite: true,
+            list_only: true,
+            ..Default::default()
+        };
+        let response = torrent_api
+            .api_add_torrent(AddTorrent::from_url(uri), Some(options))
+            .await?;
+
+        let files = response
+            .details
+            .files
+            .ok_or(anyhow!("no files found"))?
+            .into_iter()
+            .map(|f| f.name)
+            .collect::<Vec<_>>();
+
+        Ok(files)
     }
 
     pub async fn register_torrent(
