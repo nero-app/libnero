@@ -220,6 +220,20 @@ impl Processor {
         source: TorrentSource,
         files: Vec<String>,
     ) -> anyhow::Result<Url> {
+        let video_files = files
+            .into_iter()
+            .filter(|f| {
+                mime_guess::from_path(f)
+                    .first()
+                    .map(|mime| mime.type_() == mime_guess::mime::VIDEO)
+                    .unwrap_or(false)
+            })
+            .collect::<Vec<_>>();
+
+        if video_files.is_empty() {
+            bail!("No video files found");
+        }
+
         let request_hash = match &source {
             TorrentSource::Http(request) => get_request_hash(request),
             TorrentSource::MagnetUri(uri) => {
@@ -237,7 +251,13 @@ impl Processor {
 
         self.state
             .video_requests
-            .insert(request_hash, Request::Torrent { source, files })
+            .insert(
+                request_hash,
+                Request::Torrent {
+                    source,
+                    files: video_files,
+                },
+            )
             .await;
 
         Ok(url)
