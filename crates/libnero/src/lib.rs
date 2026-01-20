@@ -1,6 +1,8 @@
+mod file_resolver;
 pub mod types;
 mod utils;
 
+pub use file_resolver::TorrentFileResolver;
 pub use nero_processor::*;
 pub use wasm_metadata::Metadata as ExtensionMetadata;
 
@@ -113,6 +115,7 @@ impl Nero {
         &self,
         series_id: &str,
         episode_id: &str,
+        episode_number: u32,
     ) -> anyhow::Result<Vec<Video>> {
         let guard = self.extension.read().await;
         let extension = guard
@@ -123,7 +126,16 @@ impl Nero {
 
         let mut videos = Vec::with_capacity(extension_videos.len());
         for video in extension_videos {
-            videos.push(video.async_try_into_with_processor(&self.processor).await?);
+            let video = Video::from_extension_video(
+                video,
+                extension,
+                &self.processor,
+                series_id,
+                episode_number,
+            )
+            .await?;
+
+            videos.push(video);
         }
 
         Ok(videos)

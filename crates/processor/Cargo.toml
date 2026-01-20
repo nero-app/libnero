@@ -10,7 +10,7 @@ bytes = { workspace = true }
 http = { workspace = true }
 librqbit = { workspace = true }
 mime = "0.3.17"
-mime_guess = "2.0.5"
+mime_guess = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
 serde = { workspace = true }
 thiserror = "2.0.17"
