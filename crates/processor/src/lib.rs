@@ -8,6 +8,7 @@ use std::{
     hash::{DefaultHasher, Hash, Hasher},
     io,
     net::SocketAddr,
+    path::PathBuf,
     sync::Arc,
     time::Duration,
 };
@@ -184,7 +185,7 @@ impl Processor {
         Ok(base)
     }
 
-    pub async fn get_torrent_files(&self, source: TorrentSource) -> anyhow::Result<Vec<String>> {
+    pub async fn get_torrent_files(&self, source: TorrentSource) -> anyhow::Result<Vec<PathBuf>> {
         let uri = match source {
             TorrentSource::Http(request) => request.uri().to_string(),
             TorrentSource::MagnetUri(uri) => uri,
@@ -209,7 +210,7 @@ impl Processor {
             .files
             .ok_or(anyhow!("no files found"))?
             .into_iter()
-            .map(|f| f.name)
+            .map(|f| PathBuf::from(f.name))
             .collect::<Vec<_>>();
 
         Ok(files)

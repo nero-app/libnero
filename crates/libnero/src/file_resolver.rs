@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 use anitomy::OwnedElementObject;
 use nero_extensions::{WasmExtension, types::Series};
@@ -6,8 +6,9 @@ use nero_extensions::{WasmExtension, types::Series};
 // TODO: implement quality-based file selection when multiple files exist for the same series and episode
 // consider adding configuration options to customize quality preferences?
 
-// TODO: handle files in subdirectories (e.g., "Season 1/[SubsPlease] Series - E01.mkv")
-// the current implementation may not correctly parse or match files organized in nested folder structures
+// TODO: try to extract season information from parent directories when not present in filename
+// (e.g., "Season 1/Episode 01.mkv" should extract season from directory path)
+// currently only parses the filename, which may cause ambiguous series matching across seasons
 
 const NOT_EPISODE_TYPES: [&str; 10] = [
     "op", "opening", "ncop", "ed", "ending", "nced", "pv", "preview", "trailer", "cm",
@@ -19,20 +20,20 @@ pub trait TorrentFileResolver {
         extension: &WasmExtension,
         series_id: &str,
         episode_number: u32,
-    ) -> impl Future<Output = anyhow::Result<Option<String>>>;
+    ) -> impl Future<Output = anyhow::Result<Option<PathBuf>>>;
 
-    fn parse_all(&self) -> Vec<(String, OwnedElementObject)>;
+    fn parse_all(&self) -> Vec<(PathBuf, OwnedElementObject)>;
 
-    fn parse_episodes(&self) -> Vec<(String, OwnedElementObject)>;
+    fn parse_episodes(&self) -> Vec<(PathBuf, OwnedElementObject)>;
 }
 
-impl TorrentFileResolver for Vec<String> {
+impl TorrentFileResolver for Vec<PathBuf> {
     async fn find_episode(
         &self,
         extension: &WasmExtension,
         series_id: &str,
         episode_number: u32,
-    ) -> anyhow::Result<Option<String>> {
+    ) -> anyhow::Result<Option<PathBuf>> {
         let parsed_episodes = self.parse_episodes();
 
         let mut grouped_episodes = HashMap::new();
@@ -55,17 +56,23 @@ impl TorrentFileResolver for Vec<String> {
         Ok(None)
     }
 
-    fn parse_all(&self) -> Vec<(String, OwnedElementObject)> {
+    fn parse_all(&self) -> Vec<(PathBuf, OwnedElementObject)> {
         self.iter()
-            .map(|path| {
-                let elements = anitomy::parse(path);
+            .filter_map(|path| {
+                let filename = path.file_name()?.to_str()?;
+
+                if filename.is_empty() {
+                    return None;
+                }
+
+                let elements = anitomy::parse(filename);
                 let obj = elements.iter().collect();
-                (path.clone(), obj)
+                Some((path.clone(), obj))
             })
             .collect()
     }
 
-    fn parse_episodes(&self) -> Vec<(String, OwnedElementObject)> {
+    fn parse_episodes(&self) -> Vec<(PathBuf, OwnedElementObject)> {
         self.parse_all()
             .into_iter()
             .filter(|(_, obj)| {
@@ -96,10 +103,10 @@ fn title_key(obj: &OwnedElementObject) -> String {
 
 async fn find_episode_in_group(
     extension: &WasmExtension,
-    files: &[(String, OwnedElementObject)],
+    files: &[(PathBuf, OwnedElementObject)],
     series_id: &str,
     episode_number: u32,
-) -> anyhow::Result<Option<String>> {
+) -> anyhow::Result<Option<PathBuf>> {
     let representative = match files.first() {
         Some((_, obj)) => obj,
         None => return Ok(None),
@@ -122,7 +129,7 @@ async fn find_episode_in_group(
                 .map(|e| e == episode_number)
                 .unwrap_or(false)
         })
-        .map(|(file, _)| file.clone());
+        .map(|(path, _)| path.clone());
 
     Ok(target)
 }

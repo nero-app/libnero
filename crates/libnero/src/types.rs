@@ -179,7 +179,10 @@ impl Video {
             .ok_or(anyhow::anyhow!("Episode not found"))?;
 
         processor
-            .register_torrent(torrent_source, vec![target_file])
+            .register_torrent(
+                torrent_source,
+                vec![target_file.to_string_lossy().to_string()],
+            )
             .await
     }
 }
