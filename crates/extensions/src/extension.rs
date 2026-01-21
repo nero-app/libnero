@@ -74,6 +74,12 @@ impl WasmExtension {
             metadata,
         })
     }
+
+    // TODO:
+    #[allow(unused_variables)]
+    pub(crate) fn get_version(wasm_bytes: &[u8]) -> Result<Version> {
+        Ok(Version::new(0, 1, 0))
+    }
 }
 
 impl Extension for WasmExtension {

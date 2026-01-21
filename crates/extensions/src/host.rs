@@ -1,7 +1,5 @@
 use std::path::Path;
 
-use anyhow::Result;
-use semver::Version;
 use wasm_metadata::Payload;
 use wasmtime::{Engine, component::Component};
 
@@ -32,7 +30,7 @@ impl WasmHost {
         let path = path.as_ref();
 
         let wasm_bytes = std::fs::read(path)?;
-        let version = Self::get_extension_version(&wasm_bytes)?;
+        let version = WasmExtension::get_version(&wasm_bytes)?;
         let component = Component::from_file(&self.engine, path)?;
         let metadata = match Payload::from_binary(&wasm_bytes)? {
             Payload::Component { metadata, .. } => metadata,
@@ -43,11 +41,5 @@ impl WasmHost {
             WasmExtension::instantiate_async(&self.engine, version, &component, metadata).await?;
 
         Ok(extension)
-    }
-
-    // TODO:
-    #[allow(unused_variables)]
-    fn get_extension_version(wasm_bytes: &[u8]) -> Result<Version> {
-        Ok(Version::new(0, 1, 0))
     }
 }
