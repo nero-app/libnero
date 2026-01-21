@@ -7,7 +7,7 @@ pub use wasm_metadata::Metadata as ExtensionMetadata;
 use std::sync::Arc;
 
 use anyhow::bail;
-use nero_extensions::{WasmExtension, host::WasmHost};
+use nero_extensions::{Extension, WasmExtension, WasmHost};
 use tokio::sync::RwLock;
 use wasm_metadata::{Metadata, Payload};
 

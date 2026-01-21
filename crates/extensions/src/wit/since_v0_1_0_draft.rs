@@ -14,8 +14,9 @@ use wasmtime::{
 use wasmtime_wasi_http::{WasiHttpView, types::HostOutgoingRequest};
 
 use crate::{
-    AsyncTryIntoWithStore, WasmState,
-    extensions::{
+    AsyncTryIntoWithStore,
+    extension::WasmState,
+    wit::{
         AsyncTryFromWithStore, IntoHttpRequest,
         since_v0_1_0_draft::nero::extension::{persistent_cache, types::MediaResource},
     },
@@ -247,7 +248,7 @@ impl persistent_cache::HostCache for WasmState {
     }
 
     async fn drop(&mut self, cache: Resource<Cache>) -> wasmtime::Result<()> {
-        self.table.delete(cache)?;
+        self.table().delete(cache)?;
         Ok(())
     }
 }

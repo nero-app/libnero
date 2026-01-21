@@ -5,7 +5,7 @@ use semver::Version;
 use wasm_metadata::Payload;
 use wasmtime::{Engine, component::Component};
 
-use crate::WasmExtension;
+use crate::extension::WasmExtension;
 
 pub struct WasmHost {
     engine: Engine,
