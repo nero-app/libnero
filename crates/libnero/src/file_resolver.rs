@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use anitomy::OwnedElementObject;
-use nero_extensions::{WasmExtension, types::Series};
+use nero_extensions::{Extension, WasmExtension, types::Series};
 
 // TODO: implement quality-based file selection when multiple files exist for the same series and episode
 // consider adding configuration options to customize quality preferences?
