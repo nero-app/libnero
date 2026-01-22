@@ -1,23 +1,18 @@
 mod cache;
 mod error;
 mod mime_detector;
+#[cfg(feature = "torrent")]
+pub mod torrent;
+
 mod routes;
 mod utils;
 
-use std::{
-    hash::{DefaultHasher, Hash, Hasher},
-    io,
-    net::SocketAddr,
-    path::PathBuf,
-    sync::Arc,
-    time::Duration,
-};
+use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
-use anyhow::{anyhow, bail};
+use anyhow::bail;
 use axum::{Router, routing::get};
 use bytes::Bytes;
 use http::uri::Scheme;
-use librqbit::{AddTorrent, AddTorrentOptions, Session};
 use tokio::{net::TcpListener, sync::RwLock};
 use tracing::debug;
 use url::Url;
@@ -25,12 +20,13 @@ use url::Url;
 use crate::{
     cache::Cache,
     mime_detector::mime_type,
-    routes::{handle_image_request, handle_torrent_request, handle_video_request},
+    routes::{handle_image_request, handle_video_request},
     utils::get_request_hash,
 };
 
-type HttpRequest = http::Request<Option<Bytes>>;
+pub type HttpRequest = http::Request<Option<Bytes>>;
 
+#[cfg(feature = "torrent")]
 #[derive(Debug, Clone)]
 pub enum TorrentSource {
     Http(Box<HttpRequest>),
@@ -40,6 +36,7 @@ pub enum TorrentSource {
 #[derive(Debug, Clone)]
 enum Request {
     Http(Box<HttpRequest>),
+    #[cfg(feature = "torrent")]
     Torrent {
         source: TorrentSource,
         files: Vec<String>,
@@ -54,11 +51,12 @@ pub struct CacheConfig {
     pub video_capacity: Option<usize>,
 }
 
-struct ServerState {
+pub struct ServerState {
     addr: SocketAddr,
 
     http_client: reqwest::Client,
-    torrent_api: RwLock<Option<librqbit::Api>>,
+    #[cfg(feature = "torrent")]
+    torrent_backend: RwLock<Option<Arc<dyn torrent::TorrentBackend>>>,
 
     image_requests: Cache<u64, HttpRequest>,
     video_requests: Cache<u64, Request>,
@@ -79,7 +77,8 @@ impl Processor {
         let state = ServerState {
             addr,
             http_client: reqwest::Client::new(),
-            torrent_api: RwLock::new(None),
+            #[cfg(feature = "torrent")]
+            torrent_backend: RwLock::new(None),
             image_requests: {
                 let mut cache = Cache::default();
                 if let Some(ttl) = cache_config.image_ttl {
@@ -109,24 +108,38 @@ impl Processor {
     }
 
     pub async fn run(&self) -> io::Result<()> {
-        let app = Router::new()
-            .route("/image/{request_hash}", get(handle_image_request))
-            .route("/video/{request_hash}", get(handle_video_request))
-            .route("/torrent/{request_hash}", get(handle_torrent_request))
-            .with_state(self.state.clone());
+        let app = {
+            let base = Router::new()
+                .route("/image/{request_hash}", get(handle_image_request))
+                .route("/video/{request_hash}", get(handle_video_request));
+
+            #[cfg(feature = "torrent")]
+            let base = base.route(
+                "/torrent/{request_hash}",
+                get(routes::handle_torrent_request),
+            );
+
+            base.with_state(self.state.clone())
+        };
+
+        let app = app.with_state(self.state.clone());
 
         let listener = TcpListener::bind(self.state.addr).await?;
         debug!("listening on {}", listener.local_addr().unwrap());
         axum::serve(listener, app).await
     }
 
-    pub async fn enable_torrent_support(&self, session: Arc<Session>) {
-        let api = librqbit::Api::new(session, None);
-        *self.state.torrent_api.write().await = Some(api);
+    #[cfg(feature = "torrent")]
+    pub async fn set_torrent_backend<B>(&self, backend: B)
+    where
+        B: torrent::TorrentBackend + 'static,
+    {
+        *self.state.torrent_backend.write().await = Some(Arc::new(backend));
     }
 
+    #[cfg(feature = "torrent")]
     pub async fn disable_torrent_support(&self) {
-        *self.state.torrent_api.write().await = None;
+        *self.state.torrent_backend.write().await = None;
     }
 
     pub async fn register_image_request(&self, request: HttpRequest) -> anyhow::Result<Url> {
@@ -171,6 +184,7 @@ impl Processor {
 
         match mime_type.type_() {
             mime::VIDEO => base.set_path(&format!("/video/{request_hash}")),
+            #[cfg(feature = "torrent")]
             mime::APPLICATION if mime_type.subtype() == "application/x-bittorrent" => {
                 bail!("Torrent file. Use register_torrent() instead.")
             }
@@ -185,42 +199,27 @@ impl Processor {
         Ok(base)
     }
 
-    pub async fn get_torrent_files(&self, source: TorrentSource) -> anyhow::Result<Vec<PathBuf>> {
-        let uri = match source {
-            TorrentSource::Http(request) => request.uri().to_string(),
-            TorrentSource::MagnetUri(uri) => uri,
-        };
-
-        let api_guard = self.state.torrent_api.read().await;
-        let torrent_api = api_guard
+    #[cfg(feature = "torrent")]
+    pub async fn get_torrent_files(
+        &self,
+        source: TorrentSource,
+    ) -> anyhow::Result<Vec<std::path::PathBuf>> {
+        let backend_guard = self.state.torrent_backend.read().await;
+        let backend = backend_guard
             .as_ref()
-            .ok_or(anyhow!("torrent support is not enabled."))?;
+            .ok_or_else(|| anyhow::anyhow!("torrent support is not enabled"))?;
 
-        let options = AddTorrentOptions {
-            overwrite: true,
-            list_only: true,
-            ..Default::default()
-        };
-        let response = torrent_api
-            .api_add_torrent(AddTorrent::from_url(uri), Some(options))
-            .await?;
-
-        let files = response
-            .details
-            .files
-            .ok_or(anyhow!("no files found"))?
-            .into_iter()
-            .map(|f| PathBuf::from(f.name))
-            .collect::<Vec<_>>();
-
-        Ok(files)
+        backend.list_files(&source).await
     }
 
+    #[cfg(feature = "torrent")]
     pub async fn register_torrent(
         &self,
         source: TorrentSource,
         files: Vec<String>,
     ) -> anyhow::Result<Url> {
+        use std::hash::{DefaultHasher, Hash, Hasher};
+
         let video_files = files
             .into_iter()
             .filter(|f| {

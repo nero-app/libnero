@@ -23,8 +23,10 @@ pub async fn handle_torrent_request(
         .await
         .replace(stored_request.clone());
 
-    let api_guard = state.torrent_api.read().await;
-    let torrent_api = api_guard.as_ref().ok_or(Error::TorrentSupportDisabled)?;
+    let backend_guard = state.torrent_backend.read().await;
+    let backend = backend_guard
+        .as_ref()
+        .ok_or(Error::TorrentSupportDisabled)?;
 
     todo!()
 }
