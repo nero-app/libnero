@@ -7,7 +7,7 @@ use axum::{
 };
 
 use crate::{
-    Request, ServerState,
+    CurrentVideo, ServerState,
     error::Error,
     routes::{HopByHopHeadersExt, IntoReqwestRequest},
 };
@@ -27,7 +27,7 @@ pub async fn handle_video_request(
         .current_video
         .write()
         .await
-        .replace(Request::Http(Box::new(stored_request.clone())));
+        .replace(CurrentVideo::Http(Box::new(stored_request.clone())));
 
     for (name, value) in incoming_request.headers().iter() {
         if name == http::header::HOST {

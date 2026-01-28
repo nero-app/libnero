@@ -161,28 +161,30 @@ impl Video {
         requested_series_id: &str,
         requested_episode_number: u32,
     ) -> anyhow::Result<Url> {
-        let files = processor.get_torrent_files(torrent_source.clone()).await?;
+        let torrent_backend = processor
+            .torrent_backend()
+            .await
+            .ok_or(anyhow::anyhow!("torrent support is not enabled."))?;
+
+        let files = torrent_backend.list_files(&torrent_source).await?;
 
         let video_files = files
             .into_iter()
             .filter(|f| {
-                mime_guess::from_path(f)
+                mime_guess::from_path(&f.path)
                     .first()
                     .map(|mime| mime.type_() == mime_guess::mime::VIDEO)
                     .unwrap_or(false)
             })
             .collect::<Vec<_>>();
 
-        let target_file = video_files
+        let target_index = video_files
             .find_episode(extension, requested_series_id, requested_episode_number)
             .await?
             .ok_or(anyhow::anyhow!("Episode not found"))?;
 
         processor
-            .register_torrent(
-                torrent_source,
-                vec![target_file.to_string_lossy().to_string()],
-            )
+            .register_torrent(torrent_source, vec![target_index])
             .await
     }
 }

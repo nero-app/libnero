@@ -16,9 +16,10 @@ reqwest = { workspace = true, features = ["stream"] }
 serde = { workspace = true }
 thiserror = "2.0.17"
 tokio = { workspace = true, features = ["net"] }
+tokio-util = { version = "0.7.18", optional = true }
 tracing = { workspace = true }
 url = { workspace = true }
 
 [features]
 torrent = ["dep:async-trait"]
-torrent-librqbit = ["torrent", "dep:librqbit"]
+torrent-librqbit = ["torrent", "dep:librqbit", "dep:tokio-util"]

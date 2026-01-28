@@ -6,10 +6,12 @@ pub use file_resolver::TorrentFileResolver;
 pub use nero_processor::*;
 pub use wasm_metadata::Metadata as ExtensionMetadata;
 
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use anyhow::bail;
+use librqbit::Session;
 use nero_extensions::{Extension, WasmExtension, WasmHost};
+use nero_processor::torrent::RqbitTorrentBackend;
 use tokio::sync::RwLock;
 use wasm_metadata::{Metadata, Payload};
 
@@ -54,6 +56,21 @@ impl Nero {
     ) -> anyhow::Result<()> {
         let extension = self.host.load_extension_async(file_path).await?;
         self.extension.write().await.replace(extension);
+
+        Ok(())
+    }
+
+    // TODO: options
+    pub async fn enable_torrent_support(&self, output_folder: PathBuf) -> anyhow::Result<()> {
+        let session = Session::new(output_folder).await?;
+        let backend = RqbitTorrentBackend::new(session);
+        self.processor.set_torrent_backend(backend).await;
+
+        Ok(())
+    }
+
+    pub async fn disable_torrent_support(&self) -> anyhow::Result<()> {
+        self.processor.remove_torrent_backend().await;
 
         Ok(())
     }

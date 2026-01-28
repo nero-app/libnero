@@ -17,6 +17,14 @@ pub enum Error {
     #[cfg(feature = "torrent")]
     #[error("Torrent support is disabled")]
     TorrentSupportDisabled,
+
+    #[cfg(feature = "torrent")]
+    #[error("Torrent error: {0}")]
+    TorrentBackend(#[from] anyhow::Error),
+
+    #[cfg(feature = "torrent")]
+    #[error("Invalid request type")]
+    InvalidRequestType,
 }
 
 impl IntoResponse for Error {
@@ -34,6 +42,16 @@ impl IntoResponse for Error {
             #[cfg(feature = "torrent")]
             Error::TorrentSupportDisabled => {
                 error!("Torrent support is disabled: {:#}", self);
+                StatusCode::BAD_REQUEST
+            }
+            #[cfg(feature = "torrent")]
+            Error::TorrentBackend(e) => {
+                error!("Torrent backend error: {:#}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+            #[cfg(feature = "torrent")]
+            Error::InvalidRequestType => {
+                error!("Invalid request type: {:#}", self);
                 StatusCode::BAD_REQUEST
             }
         };

@@ -1,10 +1,9 @@
 mod cache;
 mod error;
 mod mime_detector;
+mod routes;
 #[cfg(feature = "torrent")]
 pub mod torrent;
-
-mod routes;
 mod utils;
 
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
@@ -35,11 +34,21 @@ pub enum TorrentSource {
 
 #[derive(Debug, Clone)]
 enum Request {
+    #[allow(unused)]
     Http(Box<HttpRequest>),
     #[cfg(feature = "torrent")]
     Torrent {
         source: TorrentSource,
-        files: Vec<String>,
+        file_indices: Vec<usize>,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum CurrentVideo {
+    Http(Box<HttpRequest>),
+    #[cfg(feature = "torrent")]
+    Torrent {
+        torrent_id: String,
     },
 }
 
@@ -61,7 +70,7 @@ pub struct ServerState {
     image_requests: Cache<u64, HttpRequest>,
     video_requests: Cache<u64, Request>,
 
-    current_video: RwLock<Option<Request>>,
+    current_video: RwLock<Option<CurrentVideo>>,
 }
 
 pub struct Processor {
@@ -114,10 +123,16 @@ impl Processor {
                 .route("/video/{request_hash}", get(handle_video_request));
 
             #[cfg(feature = "torrent")]
-            let base = base.route(
-                "/torrent/{request_hash}",
-                get(routes::handle_torrent_request),
-            );
+            let base = {
+                base.route(
+                    "/torrent/{request_hash}",
+                    get(routes::handle_torrent_request),
+                )
+                .route(
+                    "/torrent/{torrent_id}/stream/{file_index}",
+                    get(routes::handle_torrent_stream_request),
+                )
+            };
 
             base.with_state(self.state.clone())
         };
@@ -138,7 +153,12 @@ impl Processor {
     }
 
     #[cfg(feature = "torrent")]
-    pub async fn disable_torrent_support(&self) {
+    pub async fn torrent_backend(&self) -> Option<Arc<dyn torrent::TorrentBackend>> {
+        self.state.torrent_backend.read().await.clone()
+    }
+
+    #[cfg(feature = "torrent")]
+    pub async fn remove_torrent_backend(&self) {
         *self.state.torrent_backend.write().await = None;
     }
 
@@ -200,48 +220,14 @@ impl Processor {
     }
 
     #[cfg(feature = "torrent")]
-    pub async fn get_torrent_files(
-        &self,
-        source: TorrentSource,
-    ) -> anyhow::Result<Vec<std::path::PathBuf>> {
-        let backend_guard = self.state.torrent_backend.read().await;
-        let backend = backend_guard
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("torrent support is not enabled"))?;
-
-        backend.list_files(&source).await
-    }
-
-    #[cfg(feature = "torrent")]
     pub async fn register_torrent(
         &self,
         source: TorrentSource,
-        files: Vec<String>,
+        file_indices: Vec<usize>,
     ) -> anyhow::Result<Url> {
-        use std::hash::{DefaultHasher, Hash, Hasher};
+        use crate::utils::get_torrent_source_hash;
 
-        let video_files = files
-            .into_iter()
-            .filter(|f| {
-                mime_guess::from_path(f)
-                    .first()
-                    .map(|mime| mime.type_() == mime_guess::mime::VIDEO)
-                    .unwrap_or(false)
-            })
-            .collect::<Vec<_>>();
-
-        if video_files.is_empty() {
-            bail!("No video files found");
-        }
-
-        let request_hash = match &source {
-            TorrentSource::Http(request) => get_request_hash(request),
-            TorrentSource::MagnetUri(uri) => {
-                let mut hasher = DefaultHasher::new();
-                uri.hash(&mut hasher);
-                hasher.finish()
-            }
-        };
+        let request_hash = get_torrent_source_hash(&source);
 
         let url = Url::parse(&format!(
             "{}://{}/torrent/{request_hash}",
@@ -255,7 +241,7 @@ impl Processor {
                 request_hash,
                 Request::Torrent {
                     source,
-                    files: video_files,
+                    file_indices,
                 },
             )
             .await;

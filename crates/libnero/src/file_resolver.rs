@@ -1,10 +1,14 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::collections::HashMap;
 
 use anitomy::OwnedElementObject;
 use nero_extensions::{Extension, WasmExtension, types::Series};
+use nero_processor::torrent::TorrentFile;
 
-// TODO: implement quality-based file selection when multiple files exist for the same series and episode
-// consider adding configuration options to customize quality preferences?
+// TODO: implement multi-file selection with quality filtering options
+// since the processor can emit an m3u playlist with all selected torrent files being downloaded,
+// we can now return multiple file indices for the same episode (e.g. different qualities)
+// however, configuration options are needed to avoid unnecessary downloads, such as selecting only
+// the best quality, a specific quality tier, the lowest quality, or filtering by other criteria
 
 // TODO: try to extract season information from parent directories when not present in filename
 // (e.g., "Season 1/Episode 01.mkv" should extract season from directory path)
@@ -20,29 +24,29 @@ pub trait TorrentFileResolver {
         extension: &WasmExtension,
         series_id: &str,
         episode_number: u32,
-    ) -> impl Future<Output = anyhow::Result<Option<PathBuf>>>;
+    ) -> impl Future<Output = anyhow::Result<Option<usize>>>;
 
-    fn parse_all(&self) -> Vec<(PathBuf, OwnedElementObject)>;
+    fn parse_all(&self) -> Vec<(usize, OwnedElementObject)>;
 
-    fn parse_episodes(&self) -> Vec<(PathBuf, OwnedElementObject)>;
+    fn parse_episodes(&self) -> Vec<(usize, OwnedElementObject)>;
 }
 
-impl TorrentFileResolver for Vec<PathBuf> {
+impl TorrentFileResolver for Vec<TorrentFile> {
     async fn find_episode(
         &self,
         extension: &WasmExtension,
         series_id: &str,
         episode_number: u32,
-    ) -> anyhow::Result<Option<PathBuf>> {
+    ) -> anyhow::Result<Option<usize>> {
         let parsed_episodes = self.parse_episodes();
 
         let mut grouped_episodes = HashMap::new();
-        for (path, obj) in parsed_episodes {
+        for (index, obj) in parsed_episodes {
             let key = title_key(&obj);
             grouped_episodes
                 .entry(key)
                 .or_insert_with(Vec::new)
-                .push((path, obj));
+                .push((index, obj));
         }
 
         for (_, files) in grouped_episodes {
@@ -56,10 +60,10 @@ impl TorrentFileResolver for Vec<PathBuf> {
         Ok(None)
     }
 
-    fn parse_all(&self) -> Vec<(PathBuf, OwnedElementObject)> {
+    fn parse_all(&self) -> Vec<(usize, OwnedElementObject)> {
         self.iter()
-            .filter_map(|path| {
-                let filename = path.file_name()?.to_str()?;
+            .filter_map(|file| {
+                let filename = file.path.file_name()?.to_str()?;
 
                 if filename.is_empty() {
                     return None;
@@ -67,12 +71,12 @@ impl TorrentFileResolver for Vec<PathBuf> {
 
                 let elements = anitomy::parse(filename);
                 let obj = elements.iter().collect();
-                Some((path.clone(), obj))
+                Some((file.index, obj))
             })
             .collect()
     }
 
-    fn parse_episodes(&self) -> Vec<(PathBuf, OwnedElementObject)> {
+    fn parse_episodes(&self) -> Vec<(usize, OwnedElementObject)> {
         self.parse_all()
             .into_iter()
             .filter(|(_, obj)| {
@@ -103,10 +107,10 @@ fn title_key(obj: &OwnedElementObject) -> String {
 
 async fn find_episode_in_group(
     extension: &WasmExtension,
-    files: &[(PathBuf, OwnedElementObject)],
+    files: &[(usize, OwnedElementObject)],
     series_id: &str,
     episode_number: u32,
-) -> anyhow::Result<Option<PathBuf>> {
+) -> anyhow::Result<Option<usize>> {
     let representative = match files.first() {
         Some((_, obj)) => obj,
         None => return Ok(None),
@@ -129,7 +133,7 @@ async fn find_episode_in_group(
                 .map(|e| e == episode_number)
                 .unwrap_or(false)
         })
-        .map(|(path, _)| path.clone());
+        .map(|(index, _)| *index);
 
     Ok(target)
 }

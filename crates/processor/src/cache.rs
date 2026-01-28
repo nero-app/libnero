@@ -88,10 +88,6 @@ where
             return false;
         }
 
-        if map.contains_key(&key) {
-            return false;
-        }
-
         map.insert(key, CacheEntry::new(value, self.ttl));
         true
     }
@@ -118,16 +114,19 @@ where
         Some(entry.value)
     }
 
+    #[allow(unused)]
     pub async fn clear(&self) {
         let mut map = self.map.write().await;
         map.clear();
     }
 
+    #[allow(unused)]
     pub async fn len(&self) -> usize {
         let map = self.map.read().await;
         map.len()
     }
 
+    #[allow(unused)]
     pub async fn is_empty(&self) -> bool {
         let map = self.map.read().await;
         map.is_empty()
