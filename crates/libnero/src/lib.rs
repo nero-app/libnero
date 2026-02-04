@@ -1,20 +1,20 @@
+#[cfg(feature = "torrent")]
 mod file_resolver;
 pub mod types;
 mod utils;
 
-pub use file_resolver::TorrentFileResolver;
 pub use nero_processor::*;
 pub use wasm_metadata::Metadata as ExtensionMetadata;
 
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::bail;
-use librqbit::Session;
 use nero_extensions::{Extension, WasmExtension, WasmHost};
-use nero_processor::torrent::RqbitTorrentBackend;
 use tokio::sync::RwLock;
 use wasm_metadata::{Metadata, Payload};
 
+#[cfg(feature = "torrent")]
+use crate::types::TorrentContext;
 use crate::{
     types::{EpisodesPage, FilterCategory, SearchFilter, Series, SeriesPage, Video},
     utils::AyncTryIntoWithProcessor,
@@ -61,7 +61,14 @@ impl Nero {
     }
 
     // TODO: options
-    pub async fn enable_torrent_support(&self, output_folder: PathBuf) -> anyhow::Result<()> {
+    #[cfg(feature = "torrent")]
+    pub async fn enable_torrent_support(
+        &self,
+        output_folder: std::path::PathBuf,
+    ) -> anyhow::Result<()> {
+        use librqbit::Session;
+        use nero_processor::torrent::RqbitTorrentBackend;
+
         let session = Session::new(output_folder).await?;
         let backend = RqbitTorrentBackend::new(session);
         self.processor.set_torrent_backend(backend).await;
@@ -69,6 +76,7 @@ impl Nero {
         Ok(())
     }
 
+    #[cfg(feature = "torrent")]
     pub async fn disable_torrent_support(&self) -> anyhow::Result<()> {
         self.processor.remove_torrent_backend().await;
 
@@ -132,7 +140,7 @@ impl Nero {
         &self,
         series_id: &str,
         episode_id: &str,
-        episode_number: u32,
+        #[cfg(feature = "torrent")] episode_number: u32,
     ) -> anyhow::Result<Vec<Video>> {
         let guard = self.extension.read().await;
         let extension = guard
@@ -141,14 +149,20 @@ impl Nero {
 
         let extension_videos = extension.get_series_videos(series_id, episode_id).await?;
 
+        #[cfg(feature = "torrent")]
+        let torrent_ctx = TorrentContext {
+            extension,
+            series_id,
+            episode_number,
+        };
+
         let mut videos = Vec::with_capacity(extension_videos.len());
         for video in extension_videos {
             let video = Video::from_extension_video(
                 video,
-                extension,
                 &self.processor,
-                series_id,
-                episode_number,
+                #[cfg(feature = "torrent")]
+                &torrent_ctx,
             )
             .await?;
 

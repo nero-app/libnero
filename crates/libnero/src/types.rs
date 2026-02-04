@@ -1,10 +1,10 @@
 use anyhow::bail;
-use nero_extensions::{WasmExtension, types::MediaResource};
+use nero_extensions::types::MediaResource;
 use nero_processor::Processor;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::{file_resolver::TorrentFileResolver, utils::AsyncTryFromWithProcessor};
+use crate::utils::AsyncTryFromWithProcessor;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -101,6 +101,13 @@ impl AsyncTryFromWithProcessor<nero_extensions::types::Episode> for Episode {
     }
 }
 
+#[cfg(feature = "torrent")]
+pub struct TorrentContext<'a> {
+    pub extension: &'a nero_extensions::WasmExtension,
+    pub series_id: &'a str,
+    pub episode_number: u32,
+}
+
 type Resolution = (u16, u16);
 
 #[derive(Debug, Serialize)]
@@ -113,35 +120,29 @@ pub struct Video {
 impl Video {
     pub async fn from_extension_video(
         extension_video: nero_extensions::types::Video,
-        extension: &WasmExtension,
         processor: &Processor,
-        requested_series_id: &str,
-        requested_episode_number: u32,
+        #[cfg(feature = "torrent")] torrent_ctx: &TorrentContext<'_>,
     ) -> anyhow::Result<Self> {
         let url = match extension_video.media_resource {
             nero_extensions::types::MediaResource::HttpRequest(request) => {
-                match processor.register_video_request(*request.clone()).await {
-                    Ok(url) => Ok(url),
-                    Err(e) if e.to_string().contains("torrent") => {
-                        Self::handle_torrent_source(
-                            processor,
-                            extension,
-                            nero_processor::TorrentSource::Http(request.clone()),
-                            requested_series_id,
-                            requested_episode_number,
-                        )
-                        .await
-                    }
-                    Err(e) => Err(e),
-                }
-            }
-            nero_extensions::types::MediaResource::MagnetUri(uri) => {
-                Self::handle_torrent_source(
+                Self::resolve_http(
                     processor,
-                    extension,
-                    nero_processor::TorrentSource::MagnetUri(uri.clone()),
-                    requested_series_id,
-                    requested_episode_number,
+                    request,
+                    #[cfg(feature = "torrent")]
+                    torrent_ctx,
+                )
+                .await
+            }
+            #[cfg(not(feature = "torrent"))]
+            nero_extensions::types::MediaResource::MagnetUri(_) => {
+                bail!("Magnet URIs are not supported for videos (Torrent feature disabled)");
+            }
+            #[cfg(feature = "torrent")]
+            nero_extensions::types::MediaResource::MagnetUri(uri) => {
+                Self::resolve_torrent(
+                    processor,
+                    nero_processor::TorrentSource::MagnetUri(uri),
+                    torrent_ctx,
                 )
                 .await
             }
@@ -154,38 +155,59 @@ impl Video {
         })
     }
 
-    async fn handle_torrent_source(
+    async fn resolve_http(
         processor: &Processor,
-        extension: &WasmExtension,
-        torrent_source: nero_processor::TorrentSource,
-        requested_series_id: &str,
-        requested_episode_number: u32,
+        request: Box<nero_extensions::types::HttpRequest>,
+        #[cfg(feature = "torrent")] torrent_ctx: &TorrentContext<'_>,
     ) -> anyhow::Result<Url> {
+        match processor.register_video_request(*request.clone()).await {
+            Ok(url) => Ok(url),
+            Err(e) if e.to_string().contains("torrent") => {
+                #[cfg(not(feature = "torrent"))]
+                bail!("Torrent files are not supported for videos (Torrent feature disabled)");
+
+                #[cfg(feature = "torrent")]
+                Self::resolve_torrent(
+                    processor,
+                    nero_processor::TorrentSource::Http(request),
+                    torrent_ctx,
+                )
+                .await
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    #[cfg(feature = "torrent")]
+    async fn resolve_torrent(
+        processor: &Processor,
+        source: nero_processor::TorrentSource,
+        ctx: &TorrentContext<'_>,
+    ) -> anyhow::Result<Url> {
+        use crate::file_resolver::TorrentFileResolver;
+
         let torrent_backend = processor
             .torrent_backend()
             .await
             .ok_or(anyhow::anyhow!("torrent support is not enabled."))?;
 
-        let files = torrent_backend.list_files(&torrent_source).await?;
+        let files = torrent_backend.list_files(&source).await?;
 
         let video_files = files
             .into_iter()
             .filter(|f| {
                 mime_guess::from_path(&f.path)
                     .first()
-                    .map(|mime| mime.type_() == mime_guess::mime::VIDEO)
-                    .unwrap_or(false)
+                    .is_some_and(|mime| mime.type_() == mime_guess::mime::VIDEO)
             })
             .collect::<Vec<_>>();
 
         let target_index = video_files
-            .find_episode(extension, requested_series_id, requested_episode_number)
+            .find_episode(ctx.extension, ctx.series_id, ctx.episode_number)
             .await?
             .ok_or(anyhow::anyhow!("Episode not found"))?;
 
-        processor
-            .register_torrent(torrent_source, vec![target_index])
-            .await
+        processor.register_torrent(source, vec![target_index]).await
     }
 }
 
