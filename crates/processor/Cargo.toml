@@ -5,14 +5,21 @@ edition = "2024"
 
 [dependencies]
 anyhow = { workspace = true }
+async-trait = { version = "0.1.89", optional = true }
 axum = "0.8.6"
 bytes = { workspace = true }
 http = { workspace = true }
+librqbit = { workspace = true, optional = true }
 mime = "0.3.17"
-mime_guess = "2.0.5"
+mime_guess = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
 serde = { workspace = true }
 thiserror = "2.0.17"
 tokio = { workspace = true, features = ["net"] }
+tokio-util = { version = "0.7.18", optional = true }
 tracing = { workspace = true }
 url = { workspace = true }
+
+[features]
+torrent = ["dep:async-trait"]
+torrent-librqbit = ["torrent", "dep:librqbit", "dep:tokio-util"]

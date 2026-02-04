@@ -27,11 +27,21 @@ impl<V> CacheEntry<V> {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Cache<K, V> {
     map: Arc<RwLock<HashMap<K, CacheEntry<V>>>>,
     ttl: Option<Duration>,
     max_capacity: Option<usize>,
+}
+
+impl<K, V> Default for Cache<K, V> {
+    fn default() -> Self {
+        Self {
+            map: Arc::new(RwLock::new(HashMap::new())),
+            ttl: None,
+            max_capacity: None,
+        }
+    }
 }
 
 impl<K, V> Cache<K, V>
@@ -78,10 +88,6 @@ where
             return false;
         }
 
-        if map.contains_key(&key) {
-            return false;
-        }
-
         map.insert(key, CacheEntry::new(value, self.ttl));
         true
     }
@@ -108,16 +114,19 @@ where
         Some(entry.value)
     }
 
+    #[allow(unused)]
     pub async fn clear(&self) {
         let mut map = self.map.write().await;
         map.clear();
     }
 
+    #[allow(unused)]
     pub async fn len(&self) -> usize {
         let map = self.map.read().await;
         map.len()
     }
 
+    #[allow(unused)]
     pub async fn is_empty(&self) -> bool {
         let map = self.map.read().await;
         map.is_empty()

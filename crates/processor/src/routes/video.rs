@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use axum::{
     body::Body,
-    extract::{Path, Request, State},
+    extract::{Path, State},
     response::Response,
 };
 
 use crate::{
-    ServerState,
+    CurrentVideo, ServerState,
     error::Error,
     routes::{HopByHopHeadersExt, IntoReqwestRequest},
 };
@@ -15,7 +15,7 @@ use crate::{
 pub async fn handle_video_request(
     State(state): State<Arc<ServerState>>,
     Path(request_hash): Path<u64>,
-    incoming_request: Request,
+    incoming_request: axum::extract::Request,
 ) -> Result<Response, Error> {
     let mut stored_request = state
         .image_requests
@@ -27,7 +27,7 @@ pub async fn handle_video_request(
         .current_video
         .write()
         .await
-        .replace(stored_request.clone());
+        .replace(CurrentVideo::Http(Box::new(stored_request.clone())));
 
     for (name, value) in incoming_request.headers().iter() {
         if name == http::header::HOST {

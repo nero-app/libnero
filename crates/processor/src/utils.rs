@@ -4,6 +4,25 @@ use std::hash::{Hash, Hasher};
 use bytes::Bytes;
 use http::Request;
 
+use crate::TorrentSource;
+
+pub fn get_torrent_source_hash(source: &TorrentSource) -> u64 {
+    let mut hasher = DefaultHasher::new();
+
+    match source {
+        TorrentSource::Http(req) => {
+            0u8.hash(&mut hasher);
+            get_request_hash(req).hash(&mut hasher);
+        }
+        TorrentSource::MagnetUri(uri) => {
+            1u8.hash(&mut hasher);
+            uri.hash(&mut hasher);
+        }
+    }
+
+    hasher.finish()
+}
+
 pub fn get_request_hash(request: &Request<Option<Bytes>>) -> u64 {
     let mut hasher = DefaultHasher::new();
 

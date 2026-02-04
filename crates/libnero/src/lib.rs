@@ -1,13 +1,17 @@
+mod file_resolver;
 pub mod types;
 mod utils;
 
+pub use file_resolver::TorrentFileResolver;
 pub use nero_processor::*;
 pub use wasm_metadata::Metadata as ExtensionMetadata;
 
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use anyhow::bail;
+use librqbit::Session;
 use nero_extensions::{Extension, WasmExtension, WasmHost};
+use nero_processor::torrent::RqbitTorrentBackend;
 use tokio::sync::RwLock;
 use wasm_metadata::{Metadata, Payload};
 
@@ -52,6 +56,21 @@ impl Nero {
     ) -> anyhow::Result<()> {
         let extension = self.host.load_extension_async(file_path).await?;
         self.extension.write().await.replace(extension);
+
+        Ok(())
+    }
+
+    // TODO: options
+    pub async fn enable_torrent_support(&self, output_folder: PathBuf) -> anyhow::Result<()> {
+        let session = Session::new(output_folder).await?;
+        let backend = RqbitTorrentBackend::new(session);
+        self.processor.set_torrent_backend(backend).await;
+
+        Ok(())
+    }
+
+    pub async fn disable_torrent_support(&self) -> anyhow::Result<()> {
+        self.processor.remove_torrent_backend().await;
 
         Ok(())
     }
@@ -113,6 +132,7 @@ impl Nero {
         &self,
         series_id: &str,
         episode_id: &str,
+        episode_number: u32,
     ) -> anyhow::Result<Vec<Video>> {
         let guard = self.extension.read().await;
         let extension = guard
@@ -123,7 +143,16 @@ impl Nero {
 
         let mut videos = Vec::with_capacity(extension_videos.len());
         for video in extension_videos {
-            videos.push(video.async_try_into_with_processor(&self.processor).await?);
+            let video = Video::from_extension_video(
+                video,
+                extension,
+                &self.processor,
+                series_id,
+                episode_number,
+            )
+            .await?;
+
+            videos.push(video);
         }
 
         Ok(videos)

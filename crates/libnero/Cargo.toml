@@ -4,11 +4,17 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anitomy = { git = "https://github.com/Rapptz/anitomy-rs.git", rev = "c5271be" }
 anyhow = { workspace = true }
+librqbit = { workspace = true }
+mime_guess = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true, features = ["fs"] }
 tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
-nero-processor = { path = "../processor" }
+nero-processor = { path = "../processor", features = [
+    "torrent",
+    "torrent-librqbit",
+] }
 nero-extensions = { path = "../extensions" }
 wasm-metadata = { workspace = true }
