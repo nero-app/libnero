@@ -4,8 +4,10 @@ use std::hash::{Hash, Hasher};
 use bytes::Bytes;
 use http::Request;
 
+#[cfg(feature = "torrent")]
 use crate::TorrentSource;
 
+#[cfg(feature = "torrent")]
 pub fn get_torrent_source_hash(source: &TorrentSource) -> u64 {
     let mut hasher = DefaultHasher::new();
 
