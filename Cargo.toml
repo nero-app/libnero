@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/extensions",
     "crates/libnero",
+    "crates/keyvalue-ttl",
     "crates/processor",
     "crates/wasi-logging",
 ]

@@ -1,0 +1,5 @@
+[keyvalue-ttl]
+url = "https://github.com/dacchidocchi/nero-extension/archive/main.tar.gz"
+prefix = "nero-extension-main/definitions/keyvalue-ttl"
+sha256 = "cadf0586a4e0077df10a159d5237a58f32a1b1584770fd76d346ff073ed46f53"
+sha512 = "2dfd02b5eeec52cde1b60144047c8cb158667d06b976007016e3ff1356fca3024327db74535568847eb1e1abfb67ae2f41b9026251682b6d31c1804ca5f4606d"

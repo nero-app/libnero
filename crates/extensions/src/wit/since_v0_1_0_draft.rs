@@ -6,6 +6,7 @@ use self::nero::extension::types::{
 
 use anyhow::Result;
 use magnet_uri::MagnetURI;
+use nero_keyvalue_ttl::KeyValueTTL;
 use semver::Version;
 use wasmtime::{
     Engine,
@@ -18,7 +19,7 @@ use crate::{
     extension::WasmState,
     wit::{
         AsyncTryFromWithStore, IntoHttpRequest,
-        since_v0_1_0_draft::nero::extension::{persistent_cache, types::MediaResource},
+        since_v0_1_0_draft::nero::extension::types::MediaResource,
     },
 };
 
@@ -32,18 +33,17 @@ bindgen!({
     with: {
         "wasi:http": wasmtime_wasi_http::bindings::http,
         "wasi:logging": nero_wasi_logging::logging,
-        "nero:extension/persistent-cache/cache": Cache,
+        "nero:keyvalue-ttl": nero_keyvalue_ttl::keyvalue_ttl,
     },
-    trappable_error_type: {
-        "nero:extension/persistent-cache/error" => Error,
-    }
 });
 
 pub fn linker(engine: &Engine) -> Result<Linker<WasmState>> {
-    let mut linker = Linker::new(engine);
+    let mut linker = Linker::<WasmState>::new(engine);
     wasmtime_wasi::p2::add_to_linker_async(&mut linker).unwrap();
     wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker).unwrap();
     nero_wasi_logging::add_to_linker(&mut linker).unwrap();
+    nero_keyvalue_ttl::add_to_linker(&mut linker, |s| KeyValueTTL::new(s.table())).unwrap();
+
     Ok(linker)
 }
 
@@ -188,67 +188,5 @@ impl AsyncTryFromWithStore<MediaResource> for crate::types::MediaResource {
                 Ok(crate::types::MediaResource::MagnetUri(uri))
             }
         }
-    }
-}
-
-// TODO:
-
-#[allow(dead_code)]
-pub enum Error {
-    NoSuchStore,
-    AccessDenied,
-    StorageLimitExceeded,
-    Other(String),
-}
-
-#[allow(dead_code)]
-pub struct Cache {}
-
-#[allow(unused_variables)]
-impl persistent_cache::Host for WasmState {
-    async fn open(&mut self, identifier: String) -> Result<Resource<Cache>, Error> {
-        todo!()
-    }
-
-    fn convert_error(&mut self, err: Error) -> wasmtime::Result<persistent_cache::Error> {
-        todo!()
-    }
-}
-
-#[allow(unused_variables)]
-impl persistent_cache::HostCache for WasmState {
-    async fn get(&mut self, cache: Resource<Cache>, key: String) -> Result<Option<Vec<u8>>, Error> {
-        todo!()
-    }
-
-    async fn set(
-        &mut self,
-        cache: Resource<Cache>,
-        key: String,
-        value: Vec<u8>,
-        ttl_ms: Option<u32>,
-    ) -> Result<(), Error> {
-        todo!()
-    }
-
-    async fn delete(&mut self, cache: Resource<Cache>, key: String) -> Result<(), Error> {
-        todo!()
-    }
-
-    async fn exists(&mut self, cache: Resource<Cache>, key: String) -> Result<bool, Error> {
-        todo!()
-    }
-
-    async fn list_keys(
-        &mut self,
-        cache: Resource<Cache>,
-        cursor: Option<String>,
-    ) -> Result<persistent_cache::KeyResponse, Error> {
-        todo!()
-    }
-
-    async fn drop(&mut self, cache: Resource<Cache>) -> wasmtime::Result<()> {
-        self.table().delete(cache)?;
-        Ok(())
     }
 }

@@ -9,6 +9,7 @@ bytes = { workspace = true }
 http = { workspace = true }
 magnet-uri = { workspace = true }
 semver = { workspace = true }
+nero-keyvalue-ttl = { path = "../keyvalue-ttl" }
 nero-wasi-logging = { path = "../wasi-logging" }
 tokio = { workspace = true, features = ["sync", "fs"] }
 tracing = { workspace = true }

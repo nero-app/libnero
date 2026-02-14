@@ -1,4 +1,4 @@
-package nero:nero-extensions;
+package libnero:extension;
 
 world bindings {
     include nero:extension/extension@0.1.0-draft;

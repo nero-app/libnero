@@ -3,8 +3,8 @@ package nero:extension@0.1.0-draft;
 world extension {
     import wasi:http/outgoing-handler@0.2.7;
     import wasi:logging/logging@0.1.0-draft;
-    @unstable(feature = extension-persistent-cache)
-    import persistent-cache;
+    @unstable(feature = extension-keyvalue-ttl)
+    import nero:keyvalue-ttl/store@0.1.0-draft;
 
     export extractor;
 }
