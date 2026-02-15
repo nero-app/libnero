@@ -37,8 +37,7 @@ impl WasmHost {
             Payload::Module(..) => unreachable!(),
         };
 
-        let extension =
-            WasmExtension::instantiate_async(&self.engine, version, &component, metadata).await?;
+        let extension = WasmExtension::instantiate_async(version, &component, metadata).await?;
 
         Ok(extension)
     }

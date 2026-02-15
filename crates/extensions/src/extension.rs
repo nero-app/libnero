@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow};
 use semver::Version;
 use wasm_metadata::Metadata;
-use wasmtime::{Engine, Store, component::Component};
+use wasmtime::{Store, component::Component};
 use wasmtime_wasi::{ResourceTable, WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
 
@@ -53,14 +53,13 @@ pub struct WasmExtension {
 
 impl WasmExtension {
     pub(crate) async fn instantiate_async(
-        engine: &Engine,
         version: Version,
         component: &Component,
         metadata: Metadata,
     ) -> Result<Self> {
         let extension_pre = match version {
             v if v >= since_v0_1_0_draft::MIN_VER => {
-                let linker = since_v0_1_0_draft::linker(engine)?;
+                let linker = since_v0_1_0_draft::linker(component.engine())?;
                 let pre = linker.instantiate_pre(component)?;
                 Ok(ExtensionPre::V0_1_0_DRAFT(
                     since_v0_1_0_draft::ExtensionPre::new(pre)?,
