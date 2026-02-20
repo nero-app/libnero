@@ -78,14 +78,18 @@ pub struct Processor {
 }
 
 impl Processor {
-    pub fn new(addr: SocketAddr) -> Self {
-        Self::with_cache_config(addr, CacheConfig::default())
+    pub fn new(addr: SocketAddr, client: reqwest::Client) -> Self {
+        Self::with_cache_config(addr, client, CacheConfig::default())
     }
 
-    pub fn with_cache_config(addr: SocketAddr, cache_config: CacheConfig) -> Self {
+    pub fn with_cache_config(
+        addr: SocketAddr,
+        client: reqwest::Client,
+        cache_config: CacheConfig,
+    ) -> Self {
         let state = ServerState {
             addr,
-            http_client: reqwest::Client::new(),
+            http_client: client,
             #[cfg(feature = "torrent")]
             torrent_backend: RwLock::new(None),
             image_requests: {
