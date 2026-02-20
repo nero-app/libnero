@@ -58,7 +58,7 @@ impl WasmExtension {
         metadata: Metadata,
     ) -> Result<Self> {
         let extension_pre = match version {
-            v if v >= since_v0_1_0_draft::MIN_VER => {
+            v if v >= *since_v0_1_0_draft::MIN_VER => {
                 let linker = since_v0_1_0_draft::linker(component.engine())?;
                 let pre = linker.instantiate_pre(component)?;
                 Ok(ExtensionPre::V0_1_0_DRAFT(
@@ -74,10 +74,25 @@ impl WasmExtension {
         })
     }
 
-    // TODO:
-    #[allow(unused_variables)]
     pub(crate) fn get_version(wasm_bytes: &[u8]) -> Result<Version> {
-        Ok(Version::new(0, 1, 0))
+        const PACKAGE_NAMESPACE: &str = "nero";
+        const PACKAGE_NAME: &str = "extension";
+
+        let decoded = wit_component::decode(wasm_bytes)?;
+        let resolve = decoded.resolve();
+
+        for (_, pkg) in resolve.packages.iter() {
+            if pkg.name.namespace == PACKAGE_NAMESPACE
+                && pkg.name.name == PACKAGE_NAME
+                && let Some(version) = &pkg.name.version
+            {
+                return Ok(version.clone());
+            }
+        }
+
+        anyhow::bail!(
+            "wasm does not contain a '{PACKAGE_NAMESPACE}:{PACKAGE_NAME}' package with a version"
+        )
     }
 }
 

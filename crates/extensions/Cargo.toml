@@ -18,3 +18,4 @@ wasmtime = { workspace = true }
 wasmtime-wasi = { workspace = true }
 wasmtime-wasi-http = { workspace = true }
 http-body-util = "0.1.3"
+wit-component = "0.245.1"

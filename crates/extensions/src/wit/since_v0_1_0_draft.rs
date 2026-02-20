@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{str::FromStr, sync::LazyLock};
 
 use self::nero::extension::types::{
     Episode, EpisodesPage, Filter, FilterCategory, SearchFilter, Series, SeriesPage, Video,
@@ -23,7 +23,8 @@ use crate::{
     },
 };
 
-pub const MIN_VER: Version = Version::new(0, 1, 0);
+pub static MIN_VER: LazyLock<Version> =
+    LazyLock::new(|| Version::parse("0.1.0-draft").expect("invalid version"));
 
 bindgen!({
     path: "./wit/v0.1.0-draft",
