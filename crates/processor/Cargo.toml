@@ -9,6 +9,7 @@ async-trait = { version = "0.1.89", optional = true }
 axum = "0.8.6"
 bytes = { workspace = true }
 http = { workspace = true }
+infer = "0.19.0"
 librqbit = { workspace = true, optional = true }
 mime = "0.3.17"
 mime_guess = { workspace = true }

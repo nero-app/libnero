@@ -1,12 +1,13 @@
-use http::Request;
 use mime::Mime;
 use reqwest::Client;
 use std::str::FromStr;
 use tracing::{debug, warn};
 
-pub async fn mime_type<T>(
+use crate::HttpRequest;
+
+pub async fn mime_type(
     client: &Client,
-    request: &Request<T>,
+    request: &HttpRequest,
 ) -> Result<Option<Mime>, reqwest::Error> {
     if let Some(mime) = detect_from_path(request) {
         debug!("MIME type detected from URL path: {}", mime);
@@ -27,7 +28,7 @@ pub async fn mime_type<T>(
     Ok(None)
 }
 
-fn detect_from_path<T>(request: &Request<T>) -> Option<Mime> {
+fn detect_from_path(request: &HttpRequest) -> Option<Mime> {
     let path = request.uri().path();
     let extension = path.rsplit('.').next()?;
 
@@ -39,9 +40,9 @@ fn detect_from_path<T>(request: &Request<T>) -> Option<Mime> {
     Some(mime)
 }
 
-async fn detect_from_head<T>(
+async fn detect_from_head(
     client: &Client,
-    request: &Request<T>,
+    request: &HttpRequest,
 ) -> Result<Option<Mime>, reqwest::Error> {
     let res = client.head(request.uri().to_string()).send().await?;
 
@@ -64,10 +65,30 @@ async fn detect_from_head<T>(
     Ok(None)
 }
 
-#[allow(unused_variables)]
-async fn detect_from_content<T>(
+async fn detect_from_content(
     client: &Client,
-    request: &Request<T>,
+    request: &HttpRequest,
 ) -> Result<Option<Mime>, reqwest::Error> {
-    todo!()
+    let mut req = client
+        .request(request.method().clone(), request.uri().to_string())
+        .headers(request.headers().clone());
+
+    if let Some(body) = request.body() {
+        req = req.body(body.clone());
+    }
+
+    let mut res = client.execute(req.build()?).await?;
+
+    if !res.status().is_success() {
+        debug!("Content request failed with status: {}", res.status());
+        return Ok(None);
+    }
+
+    let Some(chunk) = res.chunk().await? else {
+        return Ok(None);
+    };
+
+    let mime = infer::get(&chunk).and_then(|kind| Mime::from_str(kind.mime_type()).ok());
+
+    Ok(mime)
 }
