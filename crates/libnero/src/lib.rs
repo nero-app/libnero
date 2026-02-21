@@ -65,12 +65,13 @@ impl Nero {
     pub async fn enable_torrent_support(
         &self,
         output_folder: std::path::PathBuf,
+        client: reqwest::Client,
     ) -> anyhow::Result<()> {
         use librqbit::Session;
         use nero_processor::torrent::RqbitTorrentBackend;
 
         let session = Session::new(output_folder).await?;
-        let backend = RqbitTorrentBackend::new(session);
+        let backend = RqbitTorrentBackend::new(session, client);
         self.processor.set_torrent_backend(backend).await;
 
         Ok(())

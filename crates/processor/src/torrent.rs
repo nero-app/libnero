@@ -51,15 +51,35 @@ pub trait TorrentBackend: Send + Sync {
 #[cfg(feature = "torrent-librqbit")]
 pub struct RqbitTorrentBackend {
     api: librqbit::Api,
+    client: reqwest::Client,
     files_cache: Cache<u64, Vec<TorrentFile>>,
 }
 
 #[cfg(feature = "torrent-librqbit")]
 impl RqbitTorrentBackend {
-    pub fn new(session: Arc<librqbit::Session>) -> Self {
+    pub fn new(session: Arc<librqbit::Session>, client: reqwest::Client) -> Self {
         Self {
             api: librqbit::Api::new(session, None),
+            client,
             files_cache: Cache::default(),
+        }
+    }
+
+    async fn resolve_torrent_source(
+        &self,
+        source: TorrentSource,
+    ) -> Result<librqbit::AddTorrent<'static>> {
+        match source {
+            TorrentSource::Http(mut request) => {
+                use crate::routes::{HopByHopHeadersExt, IntoReqwestRequest};
+
+                request.headers_mut().remove_hop_by_hop_headers();
+                let req = request.into_reqwest_request(self.client.clone())?;
+
+                let bytes = self.client.execute(req).await?.bytes().await?;
+                Ok(librqbit::AddTorrent::from_bytes(bytes.to_vec()))
+            }
+            TorrentSource::MagnetUri(uri) => Ok(librqbit::AddTorrent::from_url(uri)),
         }
     }
 }
@@ -122,13 +142,7 @@ impl TorrentBackend for RqbitTorrentBackend {
     ) -> Result<Torrent> {
         use librqbit::AddTorrentOptions;
 
-        // TODO: handle http torrent requests properly
-        // TorrentSource::Http may include headers, post body data,
-        // or other metadata needed to actually download the torrent file
-        let uri = match source {
-            TorrentSource::Http(request) => request.uri().to_string(),
-            TorrentSource::MagnetUri(uri) => uri,
-        };
+        let add_torrent = self.resolve_torrent_source(source).await?;
 
         let options = match options {
             Some(options) => Some(AddTorrentOptions {
@@ -139,10 +153,7 @@ impl TorrentBackend for RqbitTorrentBackend {
             None => None,
         };
 
-        let added = self
-            .api
-            .api_add_torrent(librqbit::AddTorrent::from_url(uri), options)
-            .await?;
+        let added = self.api.api_add_torrent(add_torrent, options).await?;
 
         let files = added
             .details

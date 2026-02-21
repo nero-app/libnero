@@ -8,6 +8,7 @@ anitomy = { git = "https://github.com/Rapptz/anitomy-rs.git", rev = "c5271be", o
 anyhow = { workspace = true }
 librqbit = { workspace = true, optional = true }
 mime_guess = { workspace = true }
+reqwest = { workspace = true, optional = true }
 serde = { workspace = true }
 tokio = { workspace = true, features = ["fs"] }
 tracing = { workspace = true }
@@ -20,6 +21,7 @@ wasm-metadata = { workspace = true }
 torrent = [
     "dep:anitomy",
     "dep:librqbit",
+    "dep:reqwest",
     "nero-processor/torrent",
     "nero-processor/torrent-librqbit",
 ]
