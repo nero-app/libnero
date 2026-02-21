@@ -71,7 +71,7 @@ impl RqbitTorrentBackend {
     ) -> Result<librqbit::AddTorrent<'static>> {
         match source {
             TorrentSource::Http(mut request) => {
-                use crate::routes::{HopByHopHeadersExt, IntoReqwestRequest};
+                use crate::utils::{HopByHopHeadersExt, IntoReqwestRequest};
 
                 request.headers_mut().remove_hop_by_hop_headers();
                 let req = request.into_reqwest_request(self.client.clone())?;

@@ -9,7 +9,7 @@ use axum::{
 use crate::{
     CurrentVideo, ServerState,
     error::Error,
-    routes::{HopByHopHeadersExt, IntoReqwestRequest},
+    utils::{HopByHopHeadersExt, IntoReqwestRequest},
 };
 
 pub async fn handle_video_request(

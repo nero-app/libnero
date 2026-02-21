@@ -10,7 +10,7 @@ use http::header::HOST;
 use crate::{
     ServerState,
     error::Error,
-    routes::{HopByHopHeadersExt, IntoReqwestRequest},
+    utils::{HopByHopHeadersExt, IntoReqwestRequest},
 };
 
 pub async fn handle_image_request(
