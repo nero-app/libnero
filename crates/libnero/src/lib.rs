@@ -3,6 +3,7 @@ mod file_resolver;
 pub mod types;
 mod utils;
 
+pub use nero_extensions::ExtensionOptions;
 pub use nero_processor::*;
 pub use wasm_metadata::Metadata as ExtensionMetadata;
 
@@ -53,8 +54,9 @@ impl Nero {
     pub async fn load_extension(
         &self,
         file_path: impl AsRef<std::path::Path>,
+        options: ExtensionOptions,
     ) -> anyhow::Result<()> {
-        let extension = self.host.load_extension_async(file_path).await?;
+        let extension = self.host.load_extension_async(file_path, options).await?;
         self.extension.write().await.replace(extension);
 
         Ok(())

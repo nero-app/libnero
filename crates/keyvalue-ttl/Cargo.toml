@@ -5,5 +5,10 @@ edition = "2024"
 
 [dependencies]
 anyhow = { workspace = true }
-tokio = { workspace = true, features = ["fs"] }
+sha2 = "0.11.0"
+tokio = { workspace = true, features = ["fs", "sync", "rt"] }
 wasmtime = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.27.0"
+tokio = { workspace = true, features = ["time", "rt-multi-thread", "macros"] }

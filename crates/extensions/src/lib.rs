@@ -3,7 +3,7 @@ mod host;
 pub mod types;
 mod wit;
 
-pub use extension::WasmExtension;
+pub use extension::{ExtensionOptions, WasmExtension};
 pub use host::WasmHost;
 
 use anyhow::Result;

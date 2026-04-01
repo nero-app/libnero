@@ -3,7 +3,7 @@ use std::path::Path;
 use wasm_metadata::Payload;
 use wasmtime::{Engine, component::Component};
 
-use crate::extension::WasmExtension;
+use crate::extension::{ExtensionOptions, WasmExtension};
 
 pub struct WasmHost {
     engine: Engine,
@@ -26,6 +26,7 @@ impl WasmHost {
     pub async fn load_extension_async<P: AsRef<Path>>(
         &self,
         path: P,
+        options: ExtensionOptions,
     ) -> wasmtime::Result<WasmExtension> {
         let path = path.as_ref();
 
@@ -37,7 +38,8 @@ impl WasmHost {
             Payload::Module(..) => unreachable!(),
         };
 
-        let extension = WasmExtension::instantiate_async(version, &component, metadata).await?;
+        let extension =
+            WasmExtension::instantiate_async(version, &component, metadata, options).await?;
 
         Ok(extension)
     }

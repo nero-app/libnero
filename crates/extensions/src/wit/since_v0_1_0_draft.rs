@@ -6,7 +6,6 @@ use self::nero::extension::types::{
 
 use anyhow::Result;
 use magnet_uri::MagnetURI;
-use nero_keyvalue_ttl::KeyValueTTL;
 use semver::Version;
 use wasmtime::{
     Engine,
@@ -43,7 +42,7 @@ pub fn linker(engine: &Engine) -> Result<Linker<WasmState>> {
     wasmtime_wasi::p2::add_to_linker_async(&mut linker).unwrap();
     wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker).unwrap();
     nero_wasi_logging::add_to_linker(&mut linker).unwrap();
-    nero_keyvalue_ttl::add_to_linker(&mut linker, |s| KeyValueTTL::new(s.table())).unwrap();
+    nero_keyvalue_ttl::add_to_linker(&mut linker).unwrap();
 
     Ok(linker)
 }
