@@ -3,7 +3,6 @@ mod file_resolver;
 pub mod types;
 mod utils;
 
-pub use nero_extensions::ExtensionOptions;
 pub use nero_processor::*;
 pub use wasm_metadata::Metadata as ExtensionMetadata;
 
@@ -17,7 +16,9 @@ use wasm_metadata::{Metadata, Payload};
 #[cfg(feature = "torrent")]
 use crate::types::TorrentContext;
 use crate::{
-    types::{EpisodesPage, FilterCategory, SearchFilter, Series, SeriesPage, Video},
+    types::{
+        EpisodesPage, ExtensionOptions, FilterCategory, SearchFilter, Series, SeriesPage, Video,
+    },
     utils::AyncTryIntoWithProcessor,
 };
 
@@ -56,7 +57,10 @@ impl Nero {
         file_path: impl AsRef<std::path::Path>,
         options: ExtensionOptions,
     ) -> anyhow::Result<()> {
-        let extension = self.host.load_extension_async(file_path, options).await?;
+        let extension = self
+            .host
+            .load_extension_async(file_path, options.into())
+            .await?;
         self.extension.write().await.replace(extension);
 
         Ok(())
