@@ -1,12 +1,10 @@
-mod file;
-mod store;
-
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use anyhow::Result;
+use nero_file_store::Error as FileStoreError;
+use nero_file_store::FileStore;
+use tokio::task::spawn_blocking;
 use wasmtime::component::{HasData, Resource, ResourceTable, ResourceTableError};
-
-use crate::store::FileStore;
 
 pub use self::generated::nero::*;
 
@@ -38,28 +36,30 @@ impl From<ResourceTableError> for Error {
     }
 }
 
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Self {
-        Self::Other(err.to_string())
-    }
-}
-
-impl From<anyhow::Error> for Error {
-    fn from(err: anyhow::Error) -> Self {
-        Self::Other(err.to_string())
+impl From<FileStoreError> for Error {
+    fn from(err: FileStoreError) -> Self {
+        match err {
+            FileStoreError::StorageLimitExceeded => Self::StorageLimitExceeded,
+            FileStoreError::Io(e) => Self::Other(e.to_string()),
+            FileStoreError::Corrupt(msg) => Self::Other(msg),
+        }
     }
 }
 
 pub struct Bucket;
 
 pub struct KeyValueTTLCtx {
-    store: FileStore,
+    store: Arc<FileStore>,
 }
 
 impl KeyValueTTLCtx {
     pub async fn new(root: PathBuf, max_bytes: Option<u64>) -> Result<Self> {
+        let store = spawn_blocking(move || FileStore::new(root, max_bytes))
+            .await
+            .unwrap()?;
+
         Ok(Self {
-            store: FileStore::new(root, max_bytes).await?,
+            store: Arc::new(store),
         })
     }
 }
@@ -99,7 +99,8 @@ impl keyvalue_ttl::store::HostBucket for KeyValueTTL<'_> {
         _bucket: Resource<Bucket>,
         key: String,
     ) -> Result<Option<Vec<u8>>, Error> {
-        self.ctx.store.get(&key).await
+        let store = self.ctx.store.clone();
+        Ok(spawn_blocking(move || store.get(&key)).await.unwrap()?)
     }
 
     async fn set(
@@ -109,15 +110,20 @@ impl keyvalue_ttl::store::HostBucket for KeyValueTTL<'_> {
         value: Vec<u8>,
         ttl_ms: Option<u32>,
     ) -> Result<(), Error> {
-        self.ctx.store.set(&key, value, ttl_ms).await
+        let store = self.ctx.store.clone();
+        Ok(spawn_blocking(move || store.set(&key, value, ttl_ms))
+            .await
+            .unwrap()?)
     }
 
     async fn delete(&mut self, _bucket: Resource<Bucket>, key: String) -> Result<(), Error> {
-        self.ctx.store.delete(&key).await
+        let store = self.ctx.store.clone();
+        Ok(spawn_blocking(move || store.delete(&key)).await.unwrap()?)
     }
 
     async fn exists(&mut self, _bucket: Resource<Bucket>, key: String) -> Result<bool, Error> {
-        self.ctx.store.exists(&key).await
+        let store = self.ctx.store.clone();
+        Ok(spawn_blocking(move || store.exists(&key)).await.unwrap()?)
     }
 
     async fn list_keys(
@@ -125,8 +131,15 @@ impl keyvalue_ttl::store::HostBucket for KeyValueTTL<'_> {
         _bucket: Resource<Bucket>,
         cursor: Option<String>,
     ) -> Result<keyvalue_ttl::store::KeyResponse, Error> {
-        let (keys, cursor) = self.ctx.store.list_keys(cursor.as_deref()).await?;
-        Ok(keyvalue_ttl::store::KeyResponse { keys, cursor })
+        let store = self.ctx.store.clone();
+        let result = spawn_blocking(move || store.list_keys(cursor.as_deref()))
+            .await
+            .unwrap()?;
+
+        Ok(keyvalue_ttl::store::KeyResponse {
+            keys: result.0,
+            cursor: result.1,
+        })
     }
 
     async fn drop(&mut self, bucket: Resource<Bucket>) -> wasmtime::Result<()> {

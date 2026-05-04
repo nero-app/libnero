@@ -1,10 +1,10 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::bail;
+use crate::error::Error;
 
-const KEY_LEN_LEN: usize = 2;
-const EXPIRY_LEN: usize = 8;
-const HEADER_LEN: usize = KEY_LEN_LEN + EXPIRY_LEN;
+pub const KEY_LEN_LEN: usize = 2;
+pub const EXPIRY_LEN: usize = 8;
+pub const HEADER_LEN: usize = KEY_LEN_LEN + EXPIRY_LEN;
 
 pub struct FileEntry {
     pub key: String,
@@ -13,11 +13,11 @@ pub struct FileEntry {
 }
 
 impl TryFrom<&[u8]> for FileEntry {
-    type Error = anyhow::Error;
+    type Error = Error;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         if value.len() < HEADER_LEN {
-            bail!("entry too short to contain header");
+            return Err(Error::Corrupt("entry too short to contain header".into()));
         }
 
         let expiry_ms = u64::from_le_bytes(value[..EXPIRY_LEN].try_into().unwrap());
@@ -27,10 +27,11 @@ impl TryFrom<&[u8]> for FileEntry {
 
         let key_end = HEADER_LEN + key_len;
         if value.len() < key_end {
-            bail!("entry truncated in key field");
+            return Err(Error::Corrupt("entry truncated in key field".into()));
         }
 
-        let key = String::from_utf8(value[HEADER_LEN..key_end].to_vec())?;
+        let key = String::from_utf8(value[HEADER_LEN..key_end].to_vec())
+            .map_err(|e| Error::Corrupt(format!("invalid UTF-8 in key: {e}")))?;
 
         let value = value[key_end..].to_vec();
 

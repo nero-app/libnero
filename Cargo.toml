@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/extensions",
+    "crates/file-store",
     "crates/libnero",
     "crates/keyvalue-ttl",
     "crates/processor",
