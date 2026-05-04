@@ -79,7 +79,6 @@ pub struct Processor {
     state: Arc<ServerState>,
 }
 
-// TODO: new function to construct with torrent backend
 impl Processor {
     pub fn new(addr: SocketAddr, client: reqwest::Client) -> Self {
         Self::with_config(addr, client, Config::default())
