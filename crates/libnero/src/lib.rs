@@ -3,7 +3,7 @@ mod file_resolver;
 pub mod types;
 mod utils;
 
-pub use nero_processor::*;
+use nero_processor::Processor;
 pub use wasm_metadata::Metadata as ExtensionMetadata;
 
 use std::sync::Arc;
@@ -62,30 +62,6 @@ impl Nero {
             .load_extension_async(file_path, options.into())
             .await?;
         self.extension.write().await.replace(extension);
-
-        Ok(())
-    }
-
-    // TODO: options
-    #[cfg(feature = "torrent")]
-    pub async fn enable_torrent_support(
-        &self,
-        output_folder: std::path::PathBuf,
-        client: reqwest::Client,
-    ) -> anyhow::Result<()> {
-        use librqbit::Session;
-        use nero_processor::torrent::RqbitTorrentBackend;
-
-        let session = Session::new(output_folder).await?;
-        let backend = RqbitTorrentBackend::new(session, client);
-        self.processor.set_torrent_backend(backend).await;
-
-        Ok(())
-    }
-
-    #[cfg(feature = "torrent")]
-    pub async fn disable_torrent_support(&self) -> anyhow::Result<()> {
-        self.processor.remove_torrent_backend().await;
 
         Ok(())
     }

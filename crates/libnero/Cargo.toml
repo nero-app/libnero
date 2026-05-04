@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 anitomy = { git = "https://github.com/Rapptz/anitomy-rs.git", rev = "c5271be", optional = true }
 anyhow = { workspace = true }
-librqbit = { workspace = true, optional = true }
 mime_guess = { workspace = true }
 reqwest = { workspace = true, optional = true }
 serde = { workspace = true }
@@ -18,10 +17,4 @@ nero-extensions = { path = "../extensions" }
 wasm-metadata = { workspace = true }
 
 [features]
-torrent = [
-    "dep:anitomy",
-    "dep:librqbit",
-    "dep:reqwest",
-    "nero-processor/torrent",
-    "nero-processor/torrent-librqbit",
-]
+torrent = ["dep:anitomy", "dep:reqwest", "nero-processor/torrent"]

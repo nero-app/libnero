@@ -52,12 +52,14 @@ pub enum CurrentVideo {
     },
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct CacheConfig {
+#[derive(Default)]
+pub struct Config {
     pub image_ttl: Option<Duration>,
     pub image_capacity: Option<usize>,
     pub video_ttl: Option<Duration>,
     pub video_capacity: Option<usize>,
+    #[cfg(feature = "torrent")]
+    pub torrent_backend: Option<Arc<dyn torrent::TorrentBackend>>,
 }
 
 pub struct ServerState {
@@ -65,7 +67,7 @@ pub struct ServerState {
 
     http_client: reqwest::Client,
     #[cfg(feature = "torrent")]
-    torrent_backend: RwLock<Option<Arc<dyn torrent::TorrentBackend>>>,
+    torrent_backend: Option<Arc<dyn torrent::TorrentBackend>>,
 
     image_requests: Cache<u64, HttpRequest>,
     video_requests: Cache<u64, Request>,
@@ -77,37 +79,34 @@ pub struct Processor {
     state: Arc<ServerState>,
 }
 
+// TODO: new function to construct with torrent backend
 impl Processor {
     pub fn new(addr: SocketAddr, client: reqwest::Client) -> Self {
-        Self::with_cache_config(addr, client, CacheConfig::default())
+        Self::with_config(addr, client, Config::default())
     }
 
-    pub fn with_cache_config(
-        addr: SocketAddr,
-        client: reqwest::Client,
-        cache_config: CacheConfig,
-    ) -> Self {
+    pub fn with_config(addr: SocketAddr, client: reqwest::Client, config: Config) -> Self {
         let state = ServerState {
             addr,
             http_client: client,
             #[cfg(feature = "torrent")]
-            torrent_backend: RwLock::new(None),
+            torrent_backend: config.torrent_backend,
             image_requests: {
                 let mut cache = Cache::default();
-                if let Some(ttl) = cache_config.image_ttl {
+                if let Some(ttl) = config.image_ttl {
                     cache = cache.with_ttl(ttl);
                 }
-                if let Some(capacity) = cache_config.image_capacity {
+                if let Some(capacity) = config.image_capacity {
                     cache = cache.with_capacity(capacity);
                 }
                 cache
             },
             video_requests: {
                 let mut cache = Cache::default();
-                if let Some(ttl) = cache_config.video_ttl {
+                if let Some(ttl) = config.video_ttl {
                     cache = cache.with_ttl(ttl);
                 }
-                if let Some(capacity) = cache_config.video_capacity {
+                if let Some(capacity) = config.video_capacity {
                     cache = cache.with_capacity(capacity);
                 }
                 cache
@@ -149,21 +148,8 @@ impl Processor {
     }
 
     #[cfg(feature = "torrent")]
-    pub async fn set_torrent_backend<B>(&self, backend: B)
-    where
-        B: torrent::TorrentBackend + 'static,
-    {
-        *self.state.torrent_backend.write().await = Some(Arc::new(backend));
-    }
-
-    #[cfg(feature = "torrent")]
     pub async fn torrent_backend(&self) -> Option<Arc<dyn torrent::TorrentBackend>> {
-        self.state.torrent_backend.read().await.clone()
-    }
-
-    #[cfg(feature = "torrent")]
-    pub async fn remove_torrent_backend(&self) {
-        *self.state.torrent_backend.write().await = None;
+        self.state.torrent_backend.clone()
     }
 
     pub async fn register_image_request(&self, request: HttpRequest) -> anyhow::Result<Url> {

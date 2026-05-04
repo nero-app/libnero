@@ -19,8 +19,8 @@ pub async fn handle_torrent_request(
         .await
         .ok_or(Error::NotFound)?;
 
-    let backend_guard = state.torrent_backend.read().await;
-    let backend = backend_guard
+    let backend = state
+        .torrent_backend
         .as_ref()
         .ok_or(Error::TorrentSupportDisabled)?;
 
@@ -77,8 +77,8 @@ pub async fn handle_torrent_stream_request(
     Path((torrent_id, file_index)): Path<(String, usize)>,
     incoming_request: axum::extract::Request,
 ) -> Result<Response, Error> {
-    let backend_guard = state.torrent_backend.read().await;
-    let backend = backend_guard
+    let backend = state
+        .torrent_backend
         .as_ref()
         .ok_or(Error::TorrentSupportDisabled)?;
 
