@@ -6,12 +6,11 @@ mod utils;
 use nero_processor::Processor;
 pub use wasm_metadata::Metadata as ExtensionMetadata;
 
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use anyhow::bail;
-use nero_extensions::{Extension, WasmExtension, WasmHost};
-use tokio::sync::RwLock;
-use wasm_metadata::{Metadata, Payload};
+use nero_extensions::{Extension as ExtensionTrait, WasmExtension, WasmHost};
+use wasm_metadata::Payload;
 
 #[cfg(feature = "torrent")]
 use crate::types::TorrentContext;
@@ -22,17 +21,15 @@ use crate::{
     utils::AyncTryIntoWithProcessor,
 };
 
-pub struct Nero {
+pub struct ExtensionHost {
     host: WasmHost,
-    extension: RwLock<Option<WasmExtension>>,
     processor: Arc<Processor>,
 }
 
-impl Nero {
+impl ExtensionHost {
     pub fn new(processor: Processor) -> Self {
         Self {
             host: WasmHost::default(),
-            extension: RwLock::new(None),
             processor: Arc::new(processor),
         }
     }
@@ -41,9 +38,25 @@ impl Nero {
         &self.processor
     }
 
+    pub async fn load(
+        &self,
+        file_path: impl AsRef<Path>,
+        options: ExtensionOptions,
+    ) -> anyhow::Result<Extension> {
+        let extension = self
+            .host
+            .load_extension_async(file_path, options.into())
+            .await?;
+
+        Ok(Extension {
+            inner: extension,
+            processor: Arc::clone(&self.processor),
+        })
+    }
+
     pub async fn get_extension_metadata(
-        file_path: impl AsRef<std::path::Path>,
-    ) -> anyhow::Result<Metadata> {
+        file_path: impl AsRef<Path>,
+    ) -> anyhow::Result<ExtensionMetadata> {
         let bytes = tokio::fs::read(file_path).await?;
         let payload = Payload::from_binary(&bytes)?;
         match payload {
@@ -51,30 +64,20 @@ impl Nero {
             Payload::Module(_) => bail!("unsupported wasm module"),
         }
     }
+}
 
-    pub async fn load_extension(
-        &self,
-        file_path: impl AsRef<std::path::Path>,
-        options: ExtensionOptions,
-    ) -> anyhow::Result<Arc<Metadata>> {
-        let extension = self
-            .host
-            .load_extension_async(file_path, options.into())
-            .await?;
+pub struct Extension {
+    inner: WasmExtension,
+    processor: Arc<Processor>,
+}
 
-        let metadata = extension.metadata();
-        self.extension.write().await.replace(extension);
-
-        Ok(metadata)
+impl Extension {
+    pub fn metadata(&self) -> Arc<ExtensionMetadata> {
+        self.inner.metadata()
     }
 
     pub async fn get_filters(&self) -> anyhow::Result<Vec<FilterCategory>> {
-        let guard = self.extension.read().await;
-        let extension = guard
-            .as_ref()
-            .ok_or(anyhow::anyhow!("extension not loaded"))?;
-
-        let categories = extension.filters().await?;
+        let categories = self.inner.filters().await?;
         Ok(categories.into_iter().map(Into::into).collect())
     }
 
@@ -84,25 +87,13 @@ impl Nero {
         page: Option<u16>,
         filters: Vec<SearchFilter>,
     ) -> anyhow::Result<SeriesPage> {
-        let guard = self.extension.read().await;
-        let extension = guard
-            .as_ref()
-            .ok_or(anyhow::anyhow!("extension not loaded"))?;
-
         let ext_filters = filters.into_iter().map(Into::into).collect();
-        let page = extension.search(query, page, ext_filters).await?;
-
+        let page = self.inner.search(query, page, ext_filters).await?;
         page.async_try_into_with_processor(&self.processor).await
     }
 
     pub async fn get_series_info(&self, series_id: &str) -> anyhow::Result<Series> {
-        let guard = self.extension.read().await;
-        let extension = guard
-            .as_ref()
-            .ok_or(anyhow::anyhow!("extension not loaded"))?;
-
-        let series = extension.get_series_info(series_id).await?;
-
+        let series = self.inner.get_series_info(series_id).await?;
         series.async_try_into_with_processor(&self.processor).await
     }
 
@@ -111,13 +102,7 @@ impl Nero {
         series_id: &str,
         page: Option<u16>,
     ) -> anyhow::Result<EpisodesPage> {
-        let guard = self.extension.read().await;
-        let extension = guard
-            .as_ref()
-            .ok_or(anyhow::anyhow!("extension not loaded"))?;
-
-        let page = extension.get_series_episodes(series_id, page).await?;
-
+        let page = self.inner.get_series_episodes(series_id, page).await?;
         page.async_try_into_with_processor(&self.processor).await
     }
 
@@ -127,16 +112,11 @@ impl Nero {
         episode_id: &str,
         #[cfg(feature = "torrent")] episode_number: u32,
     ) -> anyhow::Result<Vec<Video>> {
-        let guard = self.extension.read().await;
-        let extension = guard
-            .as_ref()
-            .ok_or(anyhow::anyhow!("extension not loaded"))?;
-
-        let extension_videos = extension.get_series_videos(series_id, episode_id).await?;
+        let extension_videos = self.inner.get_series_videos(series_id, episode_id).await?;
 
         #[cfg(feature = "torrent")]
         let torrent_ctx = TorrentContext {
-            extension,
+            extension: &self.inner,
             series_id,
             episode_number,
         };
@@ -150,7 +130,6 @@ impl Nero {
                 &torrent_ctx,
             )
             .await?;
-
             videos.push(video);
         }
 
