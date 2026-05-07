@@ -64,7 +64,7 @@ pub struct ExtensionOptions {
 
 pub struct WasmExtension {
     extension_pre: ExtensionPre,
-    metadata: Metadata,
+    metadata: Arc<Metadata>,
     keyvalue_ctx: Arc<KeyValueTTLCtx>,
 }
 
@@ -90,7 +90,7 @@ impl WasmExtension {
 
         Ok(Self {
             extension_pre,
-            metadata,
+            metadata: Arc::new(metadata),
             keyvalue_ctx: Arc::new(kv_ctx),
         })
     }
@@ -118,8 +118,8 @@ impl WasmExtension {
 }
 
 impl Extension for WasmExtension {
-    fn metadata(&self) -> &Metadata {
-        &self.metadata
+    fn metadata(&self) -> Arc<Metadata> {
+        self.metadata.clone()
     }
 
     async fn filters(&self) -> Result<Vec<FilterCategory>> {

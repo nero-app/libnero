@@ -3,6 +3,8 @@ mod host;
 pub mod types;
 mod wit;
 
+use std::sync::Arc;
+
 pub use extension::{ExtensionOptions, WasmExtension};
 pub use host::WasmHost;
 
@@ -15,7 +17,7 @@ use crate::{
 };
 
 pub trait Extension {
-    fn metadata(&self) -> &Metadata;
+    fn metadata(&self) -> Arc<Metadata>;
 
     fn filters(&self) -> impl std::future::Future<Output = Result<Vec<FilterCategory>>>;
 
