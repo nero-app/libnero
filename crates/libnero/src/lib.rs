@@ -56,14 +56,16 @@ impl Nero {
         &self,
         file_path: impl AsRef<std::path::Path>,
         options: ExtensionOptions,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Arc<Metadata>> {
         let extension = self
             .host
             .load_extension_async(file_path, options.into())
             .await?;
+
+        let metadata = extension.metadata();
         self.extension.write().await.replace(extension);
 
-        Ok(())
+        Ok(metadata)
     }
 
     pub async fn get_filters(&self) -> anyhow::Result<Vec<FilterCategory>> {
