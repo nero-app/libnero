@@ -1,61 +1,20 @@
-use std::path::PathBuf;
-#[cfg(feature = "torrent-librqbit")]
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use anyhow::Result;
 use http::{Request, Response};
 
-use crate::TorrentSource;
-#[cfg(feature = "torrent-librqbit")]
-use crate::cache::Cache;
+use crate::{
+    TorrentSource,
+    cache::Cache,
+    torrent::{AddTorrentOptions, Torrent, TorrentBackend, TorrentFile},
+};
 
-#[derive(Clone, Debug)]
-pub struct AddTorrentOptions {
-    pub file_indices: Vec<usize>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Torrent {
-    pub id: String,
-    pub name: Option<String>,
-    pub files: Vec<TorrentFile>,
-}
-
-#[derive(Debug, Clone)]
-pub struct TorrentFile {
-    pub index: usize,
-    pub name: String,
-    pub path: PathBuf,
-}
-
-#[async_trait::async_trait]
-pub trait TorrentBackend: Send + Sync {
-    async fn list_files(&self, source: &TorrentSource) -> Result<Vec<TorrentFile>>;
-
-    async fn add_torrent(
-        &self,
-        source: TorrentSource,
-        options: Option<AddTorrentOptions>,
-    ) -> Result<Torrent>;
-
-    async fn handle_stream_request(
-        &self,
-        torrent_id: &str,
-        file_index: usize,
-        request: Request<axum::body::Body>,
-    ) -> Result<Response<axum::body::Body>>;
-
-    async fn cancel_torrent(&self, torrent: &str) -> Result<()>;
-}
-
-#[cfg(feature = "torrent-librqbit")]
 pub struct RqbitTorrentBackend {
     api: librqbit::Api,
     client: reqwest::Client,
     files_cache: Cache<u64, Vec<TorrentFile>>,
 }
 
-#[cfg(feature = "torrent-librqbit")]
 impl RqbitTorrentBackend {
     pub fn new(session: Arc<librqbit::Session>, client: reqwest::Client) -> Self {
         Self {
@@ -84,7 +43,6 @@ impl RqbitTorrentBackend {
     }
 }
 
-#[cfg(feature = "torrent-librqbit")]
 #[async_trait::async_trait]
 impl TorrentBackend for RqbitTorrentBackend {
     async fn list_files(&self, source: &TorrentSource) -> Result<Vec<TorrentFile>> {
