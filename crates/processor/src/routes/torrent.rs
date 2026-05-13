@@ -40,7 +40,14 @@ pub async fn handle_torrent_request(
     }
 
     let added = backend
-        .add_torrent(source, Some(AddTorrentOptions { file_indices }))
+        .add_torrent(
+            source,
+            if file_indices.is_empty() {
+                None
+            } else {
+                Some(AddTorrentOptions { file_indices })
+            },
+        )
         .await?;
 
     {
