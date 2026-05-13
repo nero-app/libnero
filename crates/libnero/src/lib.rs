@@ -1,5 +1,3 @@
-#[cfg(feature = "torrent")]
-mod file_resolver;
 pub mod types;
 mod utils;
 
@@ -12,8 +10,6 @@ use anyhow::bail;
 use nero_extensions::{Extension as ExtensionTrait, WasmExtension, WasmHost};
 use wasm_metadata::Payload;
 
-#[cfg(feature = "torrent")]
-use crate::types::TorrentContext;
 use crate::{
     types::{
         EpisodesPage, ExtensionOptions, FilterCategory, SearchFilter, Series, SeriesPage, Video,
@@ -110,26 +106,12 @@ impl Extension {
         &self,
         series_id: &str,
         episode_id: &str,
-        #[cfg(feature = "torrent")] episode_number: u32,
     ) -> anyhow::Result<Vec<Video>> {
         let extension_videos = self.inner.get_series_videos(series_id, episode_id).await?;
 
-        #[cfg(feature = "torrent")]
-        let torrent_ctx = TorrentContext {
-            extension: &self.inner,
-            series_id,
-            episode_number,
-        };
-
         let mut videos = Vec::with_capacity(extension_videos.len());
         for video in extension_videos {
-            let video = Video::from_extension_video(
-                video,
-                &self.processor,
-                #[cfg(feature = "torrent")]
-                &torrent_ctx,
-            )
-            .await?;
+            let video = video.async_try_into_with_processor(&self.processor).await?;
             videos.push(video);
         }
 
