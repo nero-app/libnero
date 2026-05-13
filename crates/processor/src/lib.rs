@@ -6,14 +6,13 @@ mod routes;
 pub mod torrent;
 mod utils;
 
-use std::{io, net::SocketAddr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use anyhow::bail;
 use axum::{Router, routing::get};
 use bytes::Bytes;
 use http::uri::Scheme;
-use tokio::{net::TcpListener, sync::RwLock};
-use tracing::debug;
+use tokio::sync::RwLock;
 use url::Url;
 
 use crate::{
@@ -118,32 +117,24 @@ impl Processor {
         }
     }
 
-    pub async fn run(&self) -> io::Result<()> {
-        let app = {
-            let base = Router::new()
-                .route("/image/{request_hash}", get(handle_image_request))
-                .route("/video/{request_hash}", get(handle_video_request));
+    pub fn router(&self) -> Router {
+        let base = Router::new()
+            .route("/image/{request_hash}", get(handle_image_request))
+            .route("/video/{request_hash}", get(handle_video_request));
 
-            #[cfg(feature = "torrent")]
-            let base = {
-                base.route(
-                    "/torrent/{request_hash}",
-                    get(routes::handle_torrent_request),
-                )
-                .route(
-                    "/torrent/{torrent_id}/stream/{file_index}",
-                    get(routes::handle_torrent_stream_request),
-                )
-            };
-
-            base.with_state(self.state.clone())
+        #[cfg(feature = "torrent")]
+        let base = {
+            base.route(
+                "/torrent/{request_hash}",
+                get(routes::handle_torrent_request),
+            )
+            .route(
+                "/torrent/{torrent_id}/stream/{file_index}",
+                get(routes::handle_torrent_stream_request),
+            )
         };
 
-        let app = app.with_state(self.state.clone());
-
-        let listener = TcpListener::bind(self.state.addr).await?;
-        debug!("listening on {}", listener.local_addr().unwrap());
-        axum::serve(listener, app).await
+        base.with_state(self.state.clone())
     }
 
     #[cfg(feature = "torrent")]
