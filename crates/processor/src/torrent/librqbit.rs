@@ -5,14 +5,12 @@ use http::{Request, Response};
 
 use crate::{
     TorrentSource,
-    cache::Cache,
     torrent::{AddTorrentOptions, Torrent, TorrentBackend, TorrentFile},
 };
 
 pub struct RqbitTorrentBackend {
     api: librqbit::Api,
     client: reqwest::Client,
-    files_cache: Cache<u64, Vec<TorrentFile>>,
 }
 
 impl RqbitTorrentBackend {
@@ -20,7 +18,6 @@ impl RqbitTorrentBackend {
         Self {
             api: librqbit::Api::new(session, None),
             client,
-            files_cache: Cache::default(),
         }
     }
 
@@ -47,13 +44,6 @@ impl RqbitTorrentBackend {
 impl TorrentBackend for RqbitTorrentBackend {
     async fn list_files(&self, source: &TorrentSource) -> Result<Vec<TorrentFile>> {
         use librqbit::{AddTorrent, AddTorrentOptions};
-
-        use crate::utils::get_torrent_source_hash;
-
-        let request_hash = get_torrent_source_hash(source);
-        if let Some(files) = self.files_cache.get(&request_hash).await {
-            return Ok(files.clone());
-        }
 
         let uri = match source {
             TorrentSource::Http(request) => &request.uri().to_string(),
@@ -87,8 +77,6 @@ impl TorrentBackend for RqbitTorrentBackend {
         if files.is_empty() {
             anyhow::bail!("No valid files found in torrent")
         }
-
-        self.files_cache.insert(request_hash, files.clone()).await;
 
         Ok(files)
     }
