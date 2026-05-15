@@ -80,7 +80,7 @@ impl Processor {
             .route("/video/{resource_id}", get(handle_video_request));
 
         #[cfg(feature = "torrent")]
-        let base = {
+        let base = if self.state.torrent_backend.is_some() {
             base.route(
                 "/torrent/{resource_id}",
                 get(routes::handle_torrent_request),
@@ -89,6 +89,8 @@ impl Processor {
                 "/torrent/{torrent_id}/stream/{file_index}",
                 get(routes::handle_torrent_stream_request),
             )
+        } else {
+            base
         };
 
         base.with_state(self.state.clone())
