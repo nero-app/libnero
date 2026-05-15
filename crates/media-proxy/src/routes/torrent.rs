@@ -24,11 +24,7 @@ pub async fn handle_torrent_request(
         .as_ref()
         .ok_or(Error::TorrentSupportDisabled)?;
 
-    let ResourceData::Torrent {
-        source,
-        file_indices,
-    } = resource.data
-    else {
+    let ResourceData::Torrent(source) = resource.data else {
         return Err(Error::InvalidResourceKind);
     };
 
@@ -39,16 +35,15 @@ pub async fn handle_torrent_request(
         }
     }
 
-    let added = backend
-        .add_torrent(
-            source,
-            if file_indices.is_empty() {
-                None
-            } else {
-                Some(AddTorrentOptions { file_indices })
-            },
-        )
-        .await?;
+    let options = if let Some(selector) = &state.torrent_file_selector {
+        let files = backend.list_files(&source).await?;
+        let file_indices = selector.select(&files).await?;
+        Some(AddTorrentOptions { file_indices })
+    } else {
+        None
+    };
+
+    let added = backend.add_torrent(source, options).await?;
 
     {
         let mut current = state.current_torrent.write().await;

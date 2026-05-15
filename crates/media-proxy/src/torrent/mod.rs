@@ -52,3 +52,8 @@ pub trait TorrentBackend: Send + Sync {
 
     async fn cancel_torrent(&self, torrent: &str) -> Result<()>;
 }
+
+#[async_trait::async_trait]
+pub trait TorrentFileSelector: Send + Sync {
+    async fn select(&self, files: &[TorrentFile]) -> Result<Vec<usize>>;
+}

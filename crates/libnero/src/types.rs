@@ -165,14 +165,9 @@ impl AsyncTryFromWithProxy<nero_extensions::types::Video> for Video {
                 use nero_media_proxy::torrent::TorrentSource;
 
                 let id = Uuid::new_v4().to_string();
-                let source = TorrentSource::MagnetUri(uri);
-
                 let resource = Resource {
                     kind: ResourceKind::Torrent,
-                    data: ResourceData::Torrent {
-                        source,
-                        file_indices: vec![],
-                    },
+                    data: ResourceData::Torrent(TorrentSource::MagnetUri(uri)),
                 };
                 proxy.resource_store().insert(id, resource).await
             }

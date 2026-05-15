@@ -9,7 +9,7 @@ pub mod utils;
 
 use std::{net::SocketAddr, sync::Arc};
 
-use axum::{routing::get, Router};
+use axum::{Router, routing::get};
 use bytes::Bytes;
 use tokio::sync::RwLock;
 
@@ -27,6 +27,8 @@ pub struct MediaProxyConfig {
     pub resource_store: ResourceStoreConfig,
     #[cfg(feature = "torrent")]
     pub torrent_backend: Option<Arc<dyn torrent::TorrentBackend>>,
+    #[cfg(feature = "torrent")]
+    pub torrent_file_selector: Option<Arc<dyn torrent::TorrentFileSelector>>,
 }
 
 pub struct ServerState {
@@ -36,6 +38,8 @@ pub struct ServerState {
     http_client: reqwest::Client,
     #[cfg(feature = "torrent")]
     torrent_backend: Option<Arc<dyn torrent::TorrentBackend>>,
+    #[cfg(feature = "torrent")]
+    torrent_file_selector: Option<Arc<dyn torrent::TorrentFileSelector>>,
 
     resource_store: ResourceStore,
 
@@ -54,8 +58,12 @@ impl MediaProxy {
             #[cfg(feature = "torrent")]
             addr,
             http_client: http_client.clone(),
+
             #[cfg(feature = "torrent")]
             torrent_backend: config.torrent_backend,
+            #[cfg(feature = "torrent")]
+            torrent_file_selector: config.torrent_file_selector,
+
             #[cfg(feature = "torrent")]
             resource_store: ResourceStore::new(addr, http_client, config.resource_store),
             #[cfg(not(feature = "torrent"))]

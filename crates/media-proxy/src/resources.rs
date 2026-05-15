@@ -25,10 +25,7 @@ pub enum ResourceKind {
 pub enum ResourceData {
     Http(Box<HttpRequest>),
     #[cfg(feature = "torrent")]
-    Torrent {
-        source: TorrentSource,
-        file_indices: Vec<usize>,
-    },
+    Torrent(TorrentSource),
 }
 
 #[derive(Debug, Clone)]
@@ -115,10 +112,7 @@ impl ResourceStore {
         {
             Resource {
                 kind: ResourceKind::Torrent,
-                data: ResourceData::Torrent {
-                    source: TorrentSource::Http(req.clone()),
-                    file_indices: vec![],
-                },
+                data: ResourceData::Torrent(TorrentSource::Http(req.clone())),
             }
         } else {
             resource
