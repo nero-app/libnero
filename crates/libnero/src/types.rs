@@ -2,15 +2,15 @@ use std::path::PathBuf;
 
 use anyhow::bail;
 use nero_extensions::types::MediaResource;
-use nero_processor::{
-    Processor,
+use nero_media_proxy::{
+    MediaProxy,
     resources::{Resource, ResourceData, ResourceKind},
 };
 use serde::{Deserialize, Serialize};
 use url::Url;
 use uuid::Uuid;
 
-use crate::utils::AsyncTryFromWithProcessor;
+use crate::utils::AsyncTryFromWithProxy;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,17 +35,17 @@ pub struct Page<T> {
     has_next_page: bool,
 }
 
-impl<T, U> AsyncTryFromWithProcessor<nero_extensions::types::Page<T>> for Page<U>
+impl<T, U> AsyncTryFromWithProxy<nero_extensions::types::Page<T>> for Page<U>
 where
-    U: AsyncTryFromWithProcessor<T>,
+    U: AsyncTryFromWithProxy<T>,
 {
-    async fn async_try_from_with_processor(
+    async fn async_try_from_with_proxy(
         page: nero_extensions::types::Page<T>,
-        processor: &Processor,
+        proxy: &MediaProxy,
     ) -> anyhow::Result<Self> {
         let mut items = Vec::with_capacity(page.items.len());
         for item in page.items {
-            items.push(U::async_try_from_with_processor(item, processor).await?);
+            items.push(U::async_try_from_with_proxy(item, proxy).await?);
         }
         Ok(Self {
             items,
@@ -67,10 +67,10 @@ pub struct Series {
     r#type: Option<String>,
 }
 
-impl AsyncTryFromWithProcessor<nero_extensions::types::Series> for Series {
-    async fn async_try_from_with_processor(
+impl AsyncTryFromWithProxy<nero_extensions::types::Series> for Series {
+    async fn async_try_from_with_proxy(
         series: nero_extensions::types::Series,
-        processor: &Processor,
+        proxy: &MediaProxy,
     ) -> anyhow::Result<Self> {
         Ok(Self {
             id: series.id,
@@ -82,7 +82,7 @@ impl AsyncTryFromWithProcessor<nero_extensions::types::Series> for Series {
                         kind: ResourceKind::Image,
                         data: ResourceData::Http(req),
                     };
-                    Some(processor.resource_store().insert(id, resource).await?)
+                    Some(proxy.resource_store().insert(id, resource).await?)
                 }
                 Some(MediaResource::MagnetUri(_)) => {
                     bail!("Magnet URIs are not supported for images");
@@ -105,10 +105,10 @@ pub struct Episode {
     description: Option<String>,
 }
 
-impl AsyncTryFromWithProcessor<nero_extensions::types::Episode> for Episode {
-    async fn async_try_from_with_processor(
+impl AsyncTryFromWithProxy<nero_extensions::types::Episode> for Episode {
+    async fn async_try_from_with_proxy(
         episode: nero_extensions::types::Episode,
-        processor: &Processor,
+        proxy: &MediaProxy,
     ) -> anyhow::Result<Self> {
         Ok(Self {
             id: episode.id,
@@ -121,7 +121,7 @@ impl AsyncTryFromWithProcessor<nero_extensions::types::Episode> for Episode {
                         kind: ResourceKind::Image,
                         data: ResourceData::Http(req),
                     };
-                    Some(processor.resource_store().insert(id, resource).await?)
+                    Some(proxy.resource_store().insert(id, resource).await?)
                 }
                 Some(MediaResource::MagnetUri(_)) => {
                     bail!("Magnet URIs are not supported for images");
@@ -142,10 +142,10 @@ pub struct Video {
     resolution: Resolution,
 }
 
-impl AsyncTryFromWithProcessor<nero_extensions::types::Video> for Video {
-    async fn async_try_from_with_processor(
+impl AsyncTryFromWithProxy<nero_extensions::types::Video> for Video {
+    async fn async_try_from_with_proxy(
         video: nero_extensions::types::Video,
-        processor: &Processor,
+        proxy: &MediaProxy,
     ) -> anyhow::Result<Self> {
         let url = match video.media_resource {
             nero_extensions::types::MediaResource::HttpRequest(request) => {
@@ -154,7 +154,7 @@ impl AsyncTryFromWithProcessor<nero_extensions::types::Video> for Video {
                     kind: ResourceKind::Video,
                     data: ResourceData::Http(request),
                 };
-                processor.resource_store().insert(id, resource).await
+                proxy.resource_store().insert(id, resource).await
             }
             #[cfg(not(feature = "torrent"))]
             nero_extensions::types::MediaResource::MagnetUri(_) => {
@@ -162,7 +162,7 @@ impl AsyncTryFromWithProcessor<nero_extensions::types::Video> for Video {
             }
             #[cfg(feature = "torrent")]
             nero_extensions::types::MediaResource::MagnetUri(uri) => {
-                use nero_processor::torrent::TorrentSource;
+                use nero_media_proxy::torrent::TorrentSource;
 
                 let id = Uuid::new_v4().to_string();
                 let source = TorrentSource::MagnetUri(uri);
@@ -174,7 +174,7 @@ impl AsyncTryFromWithProcessor<nero_extensions::types::Video> for Video {
                         file_indices: vec![],
                     },
                 };
-                processor.resource_store().insert(id, resource).await
+                proxy.resource_store().insert(id, resource).await
             }
         }?;
 

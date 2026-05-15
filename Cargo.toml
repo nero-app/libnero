@@ -4,8 +4,8 @@ members = [
     "crates/extensions",
     "crates/file-store",
     "crates/libnero",
+    "crates/media-proxy",
     "crates/keyvalue-ttl",
-    "crates/processor",
     "crates/wasi-logging",
 ]
 

@@ -9,7 +9,7 @@ pub mod utils;
 
 use std::{net::SocketAddr, sync::Arc};
 
-use axum::{Router, routing::get};
+use axum::{routing::get, Router};
 use bytes::Bytes;
 use tokio::sync::RwLock;
 
@@ -23,7 +23,7 @@ use crate::{
 pub type HttpRequest = http::Request<Option<Bytes>>;
 
 #[derive(Default)]
-pub struct ProcessorConfig {
+pub struct MediaProxyConfig {
     pub resource_store: ResourceStoreConfig,
     #[cfg(feature = "torrent")]
     pub torrent_backend: Option<Arc<dyn torrent::TorrentBackend>>,
@@ -44,12 +44,12 @@ pub struct ServerState {
     current_torrent: RwLock<Option<Torrent>>,
 }
 
-pub struct Processor {
+pub struct MediaProxy {
     state: Arc<ServerState>,
 }
 
-impl Processor {
-    pub fn new(addr: SocketAddr, http_client: reqwest::Client, config: ProcessorConfig) -> Self {
+impl MediaProxy {
+    pub fn new(addr: SocketAddr, http_client: reqwest::Client, config: MediaProxyConfig) -> Self {
         let state = ServerState {
             #[cfg(feature = "torrent")]
             addr,

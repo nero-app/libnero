@@ -1,19 +1,18 @@
-use nero_processor::Processor;
+use nero_media_proxy::MediaProxy;
 
-pub trait AsyncTryFromWithProcessor<T>: Sized {
-    async fn async_try_from_with_processor(value: T, processor: &Processor)
-    -> anyhow::Result<Self>;
+pub trait AsyncTryFromWithProxy<T>: Sized {
+    async fn async_try_from_with_proxy(value: T, proxy: &MediaProxy) -> anyhow::Result<Self>;
 }
 
-pub trait AyncTryIntoWithProcessor<T>: Sized {
-    async fn async_try_into_with_processor(self, processor: &Processor) -> anyhow::Result<T>;
+pub trait AyncTryIntoWithProxy<T>: Sized {
+    async fn async_try_into_with_proxy(self, proxy: &MediaProxy) -> anyhow::Result<T>;
 }
 
-impl<T, U> AyncTryIntoWithProcessor<U> for T
+impl<T, U> AyncTryIntoWithProxy<U> for T
 where
-    U: AsyncTryFromWithProcessor<T>,
+    U: AsyncTryFromWithProxy<T>,
 {
-    async fn async_try_into_with_processor(self, processor: &Processor) -> anyhow::Result<U> {
-        U::async_try_from_with_processor(self, processor).await
+    async fn async_try_into_with_proxy(self, proxy: &MediaProxy) -> anyhow::Result<U> {
+        U::async_try_from_with_proxy(self, proxy).await
     }
 }

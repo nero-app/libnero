@@ -1,7 +1,7 @@
 pub mod types;
 mod utils;
 
-use nero_processor::Processor;
+use nero_media_proxy::MediaProxy;
 pub use wasm_metadata::Metadata as ExtensionMetadata;
 
 use std::{path::Path, sync::Arc};
@@ -14,24 +14,24 @@ use crate::{
     types::{
         EpisodesPage, ExtensionOptions, FilterCategory, SearchFilter, Series, SeriesPage, Video,
     },
-    utils::AyncTryIntoWithProcessor,
+    utils::AyncTryIntoWithProxy,
 };
 
 pub struct ExtensionHost {
     host: WasmHost,
-    processor: Arc<Processor>,
+    proxy: Arc<MediaProxy>,
 }
 
 impl ExtensionHost {
-    pub fn new(processor: Processor) -> Self {
+    pub fn new(proxy: MediaProxy) -> Self {
         Self {
             host: WasmHost::default(),
-            processor: Arc::new(processor),
+            proxy: Arc::new(proxy),
         }
     }
 
-    pub fn processor(&self) -> &Arc<Processor> {
-        &self.processor
+    pub fn media_proxy(&self) -> &Arc<MediaProxy> {
+        &self.proxy
     }
 
     pub async fn load(
@@ -46,7 +46,7 @@ impl ExtensionHost {
 
         Ok(Extension {
             inner: extension,
-            processor: Arc::clone(&self.processor),
+            proxy: Arc::clone(&self.proxy),
         })
     }
 
@@ -64,7 +64,7 @@ impl ExtensionHost {
 
 pub struct Extension {
     inner: WasmExtension,
-    processor: Arc<Processor>,
+    proxy: Arc<MediaProxy>,
 }
 
 impl Extension {
@@ -85,12 +85,12 @@ impl Extension {
     ) -> anyhow::Result<SeriesPage> {
         let ext_filters = filters.into_iter().map(Into::into).collect();
         let page = self.inner.search(query, page, ext_filters).await?;
-        page.async_try_into_with_processor(&self.processor).await
+        page.async_try_into_with_proxy(&self.proxy).await
     }
 
     pub async fn get_series_info(&self, series_id: &str) -> anyhow::Result<Series> {
         let series = self.inner.get_series_info(series_id).await?;
-        series.async_try_into_with_processor(&self.processor).await
+        series.async_try_into_with_proxy(&self.proxy).await
     }
 
     pub async fn get_series_episodes(
@@ -99,7 +99,7 @@ impl Extension {
         page: Option<u16>,
     ) -> anyhow::Result<EpisodesPage> {
         let page = self.inner.get_series_episodes(series_id, page).await?;
-        page.async_try_into_with_processor(&self.processor).await
+        page.async_try_into_with_proxy(&self.proxy).await
     }
 
     pub async fn get_series_videos(
@@ -111,7 +111,7 @@ impl Extension {
 
         let mut videos = Vec::with_capacity(extension_videos.len());
         for video in extension_videos {
-            let video = video.async_try_into_with_processor(&self.processor).await?;
+            let video = video.async_try_into_with_proxy(&self.proxy).await?;
             videos.push(video);
         }
 
