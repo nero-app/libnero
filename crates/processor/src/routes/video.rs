@@ -7,27 +7,35 @@ use axum::{
 };
 
 use crate::{
-    CurrentVideo, ServerState,
+    ServerState,
     error::Error,
+    resources::{Resource, ResourceData, ResourceKind},
     utils::{HopByHopHeadersExt, IntoReqwestRequest},
 };
 
 pub async fn handle_video_request(
     State(state): State<Arc<ServerState>>,
-    Path(request_hash): Path<u64>,
+    Path(resource_id): Path<String>,
     incoming_request: axum::extract::Request,
 ) -> Result<Response, Error> {
-    let mut stored_request = state
-        .image_requests
-        .remove(&request_hash)
+    let resource = state
+        .resource_store
+        .remove(&resource_id)
         .await
         .ok_or(Error::NotFound)?;
 
-    state
-        .current_video
-        .write()
-        .await
-        .replace(CurrentVideo::Http(Box::new(stored_request.clone())));
+    #[cfg(feature = "torrent")]
+    let ResourceData::Http(mut stored_request) = resource.data else {
+        return Err(Error::InvalidResourceKind);
+    };
+
+    #[cfg(not(feature = "torrent"))]
+    let ResourceData::Http(mut stored_request) = resource.data;
+
+    state.current_video.write().await.replace(Resource {
+        kind: ResourceKind::Video,
+        data: ResourceData::Http(stored_request.clone()),
+    });
 
     for (name, value) in incoming_request.headers().iter() {
         if name == http::header::HOST {

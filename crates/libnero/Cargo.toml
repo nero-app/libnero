@@ -15,6 +15,7 @@ url = { workspace = true, features = ["serde"] }
 nero-processor = { path = "../processor" }
 nero-extensions = { path = "../extensions" }
 wasm-metadata = { workspace = true }
+uuid = { version = "1.23.1", features = ["v4"] }
 
 [features]
 torrent = ["dep:anitomy", "dep:reqwest", "nero-processor/torrent"]

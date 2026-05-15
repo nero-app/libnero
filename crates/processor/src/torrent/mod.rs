@@ -6,7 +6,13 @@ use std::path::PathBuf;
 use anyhow::Result;
 use http::{Request, Response};
 
-use crate::TorrentSource;
+use crate::HttpRequest;
+
+#[derive(Clone, Debug)]
+pub enum TorrentSource {
+    Http(Box<HttpRequest>),
+    MagnetUri(String),
+}
 
 #[derive(Clone, Debug)]
 pub struct AddTorrentOptions {

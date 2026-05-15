@@ -3,10 +3,7 @@ use std::{path::PathBuf, sync::Arc};
 use anyhow::Result;
 use http::{Request, Response};
 
-use crate::{
-    TorrentSource,
-    torrent::{AddTorrentOptions, Torrent, TorrentBackend, TorrentFile},
-};
+use crate::torrent::{AddTorrentOptions, Torrent, TorrentBackend, TorrentFile, TorrentSource};
 
 pub struct RqbitTorrentBackend {
     api: librqbit::Api,

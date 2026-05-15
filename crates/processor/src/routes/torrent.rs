@@ -7,15 +7,15 @@ use axum::{
 };
 use http::{Request, StatusCode, header::CONTENT_TYPE, uri::Scheme};
 
-use crate::{CurrentVideo, ServerState, error::Error, torrent::AddTorrentOptions};
+use crate::{ServerState, error::Error, resources::ResourceData, torrent::AddTorrentOptions};
 
 pub async fn handle_torrent_request(
     State(state): State<Arc<ServerState>>,
-    Path(request_hash): Path<u64>,
+    Path(resource_id): Path<String>,
 ) -> Result<Response, Error> {
-    let stored_request = state
-        .video_requests
-        .remove(&request_hash)
+    let resource = state
+        .resource_store
+        .remove(&resource_id)
         .await
         .ok_or(Error::NotFound)?;
 
@@ -24,18 +24,18 @@ pub async fn handle_torrent_request(
         .as_ref()
         .ok_or(Error::TorrentSupportDisabled)?;
 
-    let crate::Request::Torrent {
+    let ResourceData::Torrent {
         source,
         file_indices,
-    } = stored_request
+    } = resource.data
     else {
-        return Err(Error::InvalidRequestType);
+        return Err(Error::InvalidResourceKind);
     };
 
     {
-        let mut current = state.current_video.write().await;
-        if let Some(CurrentVideo::Torrent { torrent_id }) = current.take() {
-            backend.cancel_torrent(&torrent_id).await.ok();
+        let mut current = state.current_torrent.write().await;
+        if let Some(torrent) = current.take() {
+            backend.cancel_torrent(&torrent.id).await.ok();
         }
     }
 
@@ -51,10 +51,8 @@ pub async fn handle_torrent_request(
         .await?;
 
     {
-        let mut current = state.current_video.write().await;
-        *current = Some(CurrentVideo::Torrent {
-            torrent_id: added.id.clone(),
-        });
+        let mut current = state.current_torrent.write().await;
+        *current = Some(added.clone());
     }
 
     let mut m3u = String::from("#EXTM3U\n");

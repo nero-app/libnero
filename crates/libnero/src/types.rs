@@ -2,9 +2,13 @@ use std::path::PathBuf;
 
 use anyhow::bail;
 use nero_extensions::types::MediaResource;
-use nero_processor::Processor;
+use nero_processor::{
+    Processor,
+    resources::{Resource, ResourceData, ResourceKind},
+};
 use serde::{Deserialize, Serialize};
 use url::Url;
+use uuid::Uuid;
 
 use crate::utils::AsyncTryFromWithProcessor;
 
@@ -73,7 +77,12 @@ impl AsyncTryFromWithProcessor<nero_extensions::types::Series> for Series {
             title: series.title,
             poster_url: match series.poster_resource {
                 Some(MediaResource::HttpRequest(req)) => {
-                    Some(processor.register_image_request(*req).await?)
+                    let id = Uuid::new_v4().to_string();
+                    let resource = Resource {
+                        kind: ResourceKind::Image,
+                        data: ResourceData::Http(req),
+                    };
+                    Some(processor.resource_store().insert(id, resource).await?)
                 }
                 Some(MediaResource::MagnetUri(_)) => {
                     bail!("Magnet URIs are not supported for images");
@@ -107,7 +116,12 @@ impl AsyncTryFromWithProcessor<nero_extensions::types::Episode> for Episode {
             title: episode.title,
             thumbnail_url: match episode.thumbnail_resource {
                 Some(MediaResource::HttpRequest(req)) => {
-                    Some(processor.register_image_request(*req).await?)
+                    let id = Uuid::new_v4().to_string();
+                    let resource = Resource {
+                        kind: ResourceKind::Image,
+                        data: ResourceData::Http(req),
+                    };
+                    Some(processor.resource_store().insert(id, resource).await?)
                 }
                 Some(MediaResource::MagnetUri(_)) => {
                     bail!("Magnet URIs are not supported for images");
@@ -135,21 +149,12 @@ impl AsyncTryFromWithProcessor<nero_extensions::types::Video> for Video {
     ) -> anyhow::Result<Self> {
         let url = match video.media_resource {
             nero_extensions::types::MediaResource::HttpRequest(request) => {
-                match processor.register_video_request(*request.clone()).await {
-                    Ok(url) => Ok(url),
-                    Err(e) if e.to_string().contains("torrent") => {
-                        #[cfg(not(feature = "torrent"))]
-                        bail!(
-                            "Torrent files are not supported for videos (Torrent feature disabled)"
-                        );
-
-                        #[cfg(feature = "torrent")]
-                        processor
-                            .register_torrent(nero_processor::TorrentSource::Http(request), vec![])
-                            .await
-                    }
-                    Err(e) => Err(e),
-                }
+                let id = Uuid::new_v4().to_string();
+                let resource = Resource {
+                    kind: ResourceKind::Video,
+                    data: ResourceData::Http(request),
+                };
+                processor.resource_store().insert(id, resource).await
             }
             #[cfg(not(feature = "torrent"))]
             nero_extensions::types::MediaResource::MagnetUri(_) => {
@@ -157,9 +162,19 @@ impl AsyncTryFromWithProcessor<nero_extensions::types::Video> for Video {
             }
             #[cfg(feature = "torrent")]
             nero_extensions::types::MediaResource::MagnetUri(uri) => {
-                processor
-                    .register_torrent(nero_processor::TorrentSource::MagnetUri(uri), vec![])
-                    .await
+                use nero_processor::torrent::TorrentSource;
+
+                let id = Uuid::new_v4().to_string();
+                let source = TorrentSource::MagnetUri(uri);
+
+                let resource = Resource {
+                    kind: ResourceKind::Torrent,
+                    data: ResourceData::Torrent {
+                        source,
+                        file_indices: vec![],
+                    },
+                };
+                processor.resource_store().insert(id, resource).await
             }
         }?;
 

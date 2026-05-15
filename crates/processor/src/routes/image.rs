@@ -10,19 +10,28 @@ use http::header::HOST;
 use crate::{
     ServerState,
     error::Error,
+    resources::ResourceData,
     utils::{HopByHopHeadersExt, IntoReqwestRequest},
 };
 
 pub async fn handle_image_request(
     State(state): State<Arc<ServerState>>,
-    Path(request_hash): Path<u64>,
+    Path(resource_id): Path<String>,
     incoming_request: Request<Body>,
 ) -> Result<Response, Error> {
-    let mut stored_request = state
-        .image_requests
-        .remove(&request_hash)
+    let resource = state
+        .resource_store
+        .remove(&resource_id)
         .await
         .ok_or(Error::NotFound)?;
+
+    #[cfg(feature = "torrent")]
+    let ResourceData::Http(mut stored_request) = resource.data else {
+        return Err(Error::InvalidResourceKind);
+    };
+
+    #[cfg(not(feature = "torrent"))]
+    let ResourceData::Http(mut stored_request) = resource.data;
 
     for (name, value) in incoming_request.headers().iter() {
         if name == HOST {

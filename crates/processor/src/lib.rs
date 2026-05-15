@@ -1,77 +1,47 @@
-mod cache;
 mod error;
-mod mime_detector;
+#[cfg(feature = "torrent")]
+mod mime;
+pub mod resources;
 mod routes;
 #[cfg(feature = "torrent")]
 pub mod torrent;
-mod utils;
+pub mod utils;
 
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc};
 
-use anyhow::bail;
 use axum::{Router, routing::get};
 use bytes::Bytes;
-use http::uri::Scheme;
 use tokio::sync::RwLock;
-use url::Url;
 
+#[cfg(feature = "torrent")]
+use crate::torrent::Torrent;
 use crate::{
-    cache::Cache,
-    mime_detector::mime_type,
+    resources::{Resource, ResourceStore, ResourceStoreConfig},
     routes::{handle_image_request, handle_video_request},
-    utils::get_request_hash,
 };
 
 pub type HttpRequest = http::Request<Option<Bytes>>;
 
-#[cfg(feature = "torrent")]
-#[derive(Debug, Clone)]
-pub enum TorrentSource {
-    Http(Box<HttpRequest>),
-    MagnetUri(String),
-}
-
-#[derive(Debug, Clone)]
-enum Request {
-    #[allow(unused)]
-    Http(Box<HttpRequest>),
-    #[cfg(feature = "torrent")]
-    Torrent {
-        source: TorrentSource,
-        file_indices: Vec<usize>,
-    },
-}
-
-#[derive(Debug, Clone)]
-pub enum CurrentVideo {
-    Http(Box<HttpRequest>),
-    #[cfg(feature = "torrent")]
-    Torrent {
-        torrent_id: String,
-    },
-}
-
 #[derive(Default)]
-pub struct Config {
-    pub image_ttl: Option<Duration>,
-    pub image_capacity: Option<usize>,
-    pub video_ttl: Option<Duration>,
-    pub video_capacity: Option<usize>,
+pub struct ProcessorConfig {
+    pub resource_store: ResourceStoreConfig,
     #[cfg(feature = "torrent")]
     pub torrent_backend: Option<Arc<dyn torrent::TorrentBackend>>,
 }
 
 pub struct ServerState {
+    #[cfg(feature = "torrent")]
     addr: SocketAddr,
 
     http_client: reqwest::Client,
     #[cfg(feature = "torrent")]
     torrent_backend: Option<Arc<dyn torrent::TorrentBackend>>,
 
-    image_requests: Cache<u64, HttpRequest>,
-    video_requests: Cache<u64, Request>,
+    resource_store: ResourceStore,
 
-    current_video: RwLock<Option<CurrentVideo>>,
+    current_video: RwLock<Option<Resource>>,
+    #[cfg(feature = "torrent")]
+    current_torrent: RwLock<Option<Torrent>>,
 }
 
 pub struct Processor {
@@ -79,37 +49,20 @@ pub struct Processor {
 }
 
 impl Processor {
-    pub fn new(addr: SocketAddr, client: reqwest::Client) -> Self {
-        Self::with_config(addr, client, Config::default())
-    }
-
-    pub fn with_config(addr: SocketAddr, client: reqwest::Client, config: Config) -> Self {
+    pub fn new(addr: SocketAddr, http_client: reqwest::Client, config: ProcessorConfig) -> Self {
         let state = ServerState {
+            #[cfg(feature = "torrent")]
             addr,
-            http_client: client,
+            http_client: http_client.clone(),
             #[cfg(feature = "torrent")]
             torrent_backend: config.torrent_backend,
-            image_requests: {
-                let mut cache = Cache::default();
-                if let Some(ttl) = config.image_ttl {
-                    cache = cache.with_ttl(ttl);
-                }
-                if let Some(capacity) = config.image_capacity {
-                    cache = cache.with_capacity(capacity);
-                }
-                cache
-            },
-            video_requests: {
-                let mut cache = Cache::default();
-                if let Some(ttl) = config.video_ttl {
-                    cache = cache.with_ttl(ttl);
-                }
-                if let Some(capacity) = config.video_capacity {
-                    cache = cache.with_capacity(capacity);
-                }
-                cache
-            },
+            #[cfg(feature = "torrent")]
+            resource_store: ResourceStore::new(addr, http_client, config.resource_store),
+            #[cfg(not(feature = "torrent"))]
+            resource_store: ResourceStore::new(addr, config.resource_store),
             current_video: RwLock::new(None),
+            #[cfg(feature = "torrent")]
+            current_torrent: RwLock::new(None),
         };
 
         Self {
@@ -117,15 +70,19 @@ impl Processor {
         }
     }
 
+    pub fn resource_store(&self) -> &ResourceStore {
+        &self.state.resource_store
+    }
+
     pub fn router(&self) -> Router {
         let base = Router::new()
-            .route("/image/{request_hash}", get(handle_image_request))
-            .route("/video/{request_hash}", get(handle_video_request));
+            .route("/image/{resource_id}", get(handle_image_request))
+            .route("/video/{resource_id}", get(handle_video_request));
 
         #[cfg(feature = "torrent")]
         let base = {
             base.route(
-                "/torrent/{request_hash}",
+                "/torrent/{resource_id}",
                 get(routes::handle_torrent_request),
             )
             .route(
@@ -135,97 +92,5 @@ impl Processor {
         };
 
         base.with_state(self.state.clone())
-    }
-
-    #[cfg(feature = "torrent")]
-    pub async fn torrent_backend(&self) -> Option<Arc<dyn torrent::TorrentBackend>> {
-        self.state.torrent_backend.clone()
-    }
-
-    pub async fn register_image_request(&self, request: HttpRequest) -> anyhow::Result<Url> {
-        if request.headers().is_empty() {
-            return Ok(Url::parse(&request.uri().to_string())?);
-        }
-
-        let mime_type = mime_type(&self.state.http_client, &request)
-            .await?
-            .ok_or(anyhow::anyhow!("Could not detect mime type"))?;
-
-        if mime_type.subtype() == "application/x-bittorrent" {
-            bail!("Torrents are not supported for images");
-        }
-
-        let request_hash = get_request_hash(&request);
-        let url = Url::parse(&format!(
-            "{}://{}/image/{request_hash}",
-            Scheme::HTTP,
-            self.state.addr,
-        ))?;
-
-        self.state
-            .image_requests
-            .insert(request_hash, request)
-            .await;
-
-        Ok(url)
-    }
-
-    pub async fn register_video_request(&self, request: HttpRequest) -> anyhow::Result<Url> {
-        if request.headers().is_empty() {
-            return Ok(Url::parse(&request.uri().to_string())?);
-        }
-
-        let mime_type = mime_type(&self.state.http_client, &request)
-            .await?
-            .ok_or(anyhow::anyhow!("Could not detect mime type"))?;
-
-        let request_hash = get_request_hash(&request);
-        let mut base = Url::parse(&format!("{}://{}", Scheme::HTTP, self.state.addr))?;
-
-        match mime_type.type_() {
-            mime::VIDEO => base.set_path(&format!("/video/{request_hash}")),
-            #[cfg(feature = "torrent")]
-            mime::APPLICATION if mime_type.subtype() == "application/x-bittorrent" => {
-                bail!("Torrent file. Use register_torrent() instead.")
-            }
-            _ => bail!("Unsupported media type"),
-        }
-
-        self.state
-            .video_requests
-            .insert(request_hash, Request::Http(Box::new(request)))
-            .await;
-
-        Ok(base)
-    }
-
-    #[cfg(feature = "torrent")]
-    pub async fn register_torrent(
-        &self,
-        source: TorrentSource,
-        file_indices: Vec<usize>,
-    ) -> anyhow::Result<Url> {
-        use crate::utils::get_torrent_source_hash;
-
-        let request_hash = get_torrent_source_hash(&source);
-
-        let url = Url::parse(&format!(
-            "{}://{}/torrent/{request_hash}",
-            Scheme::HTTP,
-            self.state.addr,
-        ))?;
-
-        self.state
-            .video_requests
-            .insert(
-                request_hash,
-                Request::Torrent {
-                    source,
-                    file_indices,
-                },
-            )
-            .await;
-
-        Ok(url)
     }
 }

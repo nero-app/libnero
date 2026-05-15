@@ -23,8 +23,8 @@ pub enum Error {
     TorrentBackend(#[from] anyhow::Error),
 
     #[cfg(feature = "torrent")]
-    #[error("Invalid request type")]
-    InvalidRequestType,
+    #[error("Invalid resource kind")]
+    InvalidResourceKind,
 }
 
 impl IntoResponse for Error {
@@ -50,8 +50,8 @@ impl IntoResponse for Error {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
             #[cfg(feature = "torrent")]
-            Error::InvalidRequestType => {
-                error!("Invalid request type: {:#}", self);
+            Error::InvalidResourceKind => {
+                error!("Invalid resource kind: {:#}", self);
                 StatusCode::BAD_REQUEST
             }
         };
