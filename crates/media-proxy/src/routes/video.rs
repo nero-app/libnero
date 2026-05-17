@@ -9,7 +9,7 @@ use axum::{
 use crate::{
     ServerState,
     error::Error,
-    resources::{Resource, ResourceData, ResourceKind},
+    resources::Resource,
     utils::{HopByHopHeadersExt, IntoReqwestRequest},
 };
 
@@ -24,18 +24,16 @@ pub async fn handle_video_request(
         .await
         .ok_or(Error::NotFound)?;
 
-    #[cfg(feature = "torrent")]
-    let ResourceData::Http(mut stored_request) = resource.data else {
+    #[allow(irrefutable_let_patterns)]
+    let Resource::Http(mut stored_request) = resource else {
         return Err(Error::InvalidResourceKind);
     };
 
-    #[cfg(not(feature = "torrent"))]
-    let ResourceData::Http(mut stored_request) = resource.data;
-
-    state.current_video.write().await.replace(Resource {
-        kind: ResourceKind::Video,
-        data: ResourceData::Http(stored_request.clone()),
-    });
+    state
+        .current_video
+        .write()
+        .await
+        .replace(Resource::Http(stored_request.clone()));
 
     for (name, value) in incoming_request.headers().iter() {
         if name == http::header::HOST {

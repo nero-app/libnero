@@ -7,7 +7,7 @@ use axum::{
 };
 use http::{Request, StatusCode, header::CONTENT_TYPE, uri::Scheme};
 
-use crate::{ServerState, error::Error, resources::ResourceData, torrent::AddTorrentOptions};
+use crate::{ServerState, error::Error, resources::Resource, torrent::AddTorrentOptions};
 
 pub async fn handle_torrent_request(
     State(state): State<Arc<ServerState>>,
@@ -24,7 +24,8 @@ pub async fn handle_torrent_request(
         .as_ref()
         .ok_or(Error::TorrentSupportDisabled)?;
 
-    let ResourceData::Torrent(source) = resource.data else {
+    #[allow(irrefutable_let_patterns)]
+    let Resource::Torrent(source) = resource else {
         return Err(Error::InvalidResourceKind);
     };
 

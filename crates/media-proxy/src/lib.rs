@@ -1,5 +1,4 @@
 mod error;
-#[cfg(feature = "torrent")]
 mod mime;
 pub mod resources;
 mod routes;
@@ -64,10 +63,7 @@ impl MediaProxy {
             #[cfg(feature = "torrent")]
             torrent_file_selector: config.torrent_file_selector,
 
-            #[cfg(feature = "torrent")]
             resource_store: ResourceStore::new(addr, http_client, config.resource_store),
-            #[cfg(not(feature = "torrent"))]
-            resource_store: ResourceStore::new(addr, config.resource_store),
             current_video: RwLock::new(None),
             #[cfg(feature = "torrent")]
             current_torrent: RwLock::new(None),

@@ -5,6 +5,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use anyhow::bail;
 use http::uri::Scheme;
 use tokio::{sync::RwLock, time};
 use url::Url;
@@ -13,25 +14,11 @@ use crate::HttpRequest;
 #[cfg(feature = "torrent")]
 use crate::torrent::TorrentSource;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ResourceKind {
-    Image,
-    Video,
-    #[cfg(feature = "torrent")]
-    Torrent,
-}
-
 #[derive(Debug, Clone)]
-pub enum ResourceData {
+pub enum Resource {
     Http(Box<HttpRequest>),
     #[cfg(feature = "torrent")]
     Torrent(TorrentSource),
-}
-
-#[derive(Debug, Clone)]
-pub struct Resource {
-    pub kind: ResourceKind,
-    pub data: ResourceData,
 }
 
 #[derive(Debug, Clone)]
@@ -63,7 +50,6 @@ pub struct ResourceStoreConfig {
 
 pub struct ResourceStore {
     addr: SocketAddr,
-    #[cfg(feature = "torrent")]
     http_client: reqwest::Client,
     entries: Arc<RwLock<HashMap<String, Entry>>>,
     ttl: Option<Duration>,
@@ -73,12 +59,11 @@ pub struct ResourceStore {
 impl ResourceStore {
     pub(crate) fn new(
         addr: SocketAddr,
-        #[cfg(feature = "torrent")] http_client: reqwest::Client,
+        http_client: reqwest::Client,
         config: ResourceStoreConfig,
     ) -> Self {
         let store = Self {
             addr,
-            #[cfg(feature = "torrent")]
             http_client,
             entries: Arc::new(RwLock::new(HashMap::new())),
             ttl: config.ttl,
@@ -103,37 +88,7 @@ impl ResourceStore {
         });
     }
 
-    pub async fn insert(&self, id: String, resource: Resource) -> anyhow::Result<Url> {
-        #[cfg(feature = "torrent")]
-        let resource = if let ResourceData::Http(req) = &resource.data
-            && let Some(mime) = crate::mime::mime_type(&self.http_client, req).await?
-            && mime.type_() == mime::APPLICATION
-            && mime.subtype() == "application/x-bittorrent"
-        {
-            Resource {
-                kind: ResourceKind::Torrent,
-                data: ResourceData::Torrent(TorrentSource::Http(req.clone())),
-            }
-        } else {
-            resource
-        };
-
-        match &resource.data {
-            ResourceData::Http(req) if req.headers().is_empty() && req.body().is_none() => {
-                return Ok(Url::parse(&req.uri().to_string())?);
-            }
-            _ => {}
-        }
-
-        let path = match resource.kind {
-            ResourceKind::Image => "image",
-            ResourceKind::Video => "video",
-            #[cfg(feature = "torrent")]
-            ResourceKind::Torrent => "torrent",
-        };
-
-        let url = Url::parse(&format!("{}://{}/{}/{}", Scheme::HTTP, self.addr, path, id))?;
-
+    async fn save(&self, id: String, resource: Resource) -> anyhow::Result<()> {
         let mut entries = self.entries.write().await;
         if let Some(max) = self.capacity
             && entries.len() >= max
@@ -141,9 +96,51 @@ impl ResourceStore {
         {
             anyhow::bail!("resource store is at capacity");
         }
-
         entries.insert(id, Entry::new(resource, self.ttl));
+        Ok(())
+    }
+
+    async fn insert_http(&self, id: String, req: Box<HttpRequest>) -> anyhow::Result<Url> {
+        if req.headers().is_empty() && req.body().is_none() {
+            return Ok(Url::parse(&req.uri().to_string())?);
+        }
+
+        let mime_type = crate::mime::mime_type(&self.http_client, &req)
+            .await?
+            .ok_or(anyhow::anyhow!("Could not detect mime type"))?;
+
+        #[cfg(feature = "torrent")]
+        if mime_type.type_() == mime::APPLICATION
+            && mime_type.subtype() == "application/x-bittorrent"
+        {
+            let resource = Resource::Torrent(TorrentSource::Http(req));
+            let url = Url::parse(&format!("{}://{}/torrent/{}", Scheme::HTTP, self.addr, id))?;
+            self.save(id, resource).await?;
+            return Ok(url);
+        }
+
+        let path = match mime_type.type_() {
+            mime::IMAGE => "image",
+            mime::VIDEO => "video",
+            _ => bail!("Unsupported media type"),
+        };
+
+        let url = Url::parse(&format!("{}://{}/{}/{}", Scheme::HTTP, self.addr, path, id))?;
+        self.save(id, Resource::Http(req)).await?;
+
         Ok(url)
+    }
+
+    pub async fn insert(&self, id: String, resource: Resource) -> anyhow::Result<Url> {
+        match resource {
+            Resource::Http(req) => self.insert_http(id, req).await,
+            #[cfg(feature = "torrent")]
+            Resource::Torrent(src) => {
+                let url = Url::parse(&format!("{}://{}/torrent/{}", Scheme::HTTP, self.addr, id))?;
+                self.save(id, Resource::Torrent(src)).await?;
+                Ok(url)
+            }
+        }
     }
 
     pub async fn get(&self, id: &str) -> Option<Resource> {

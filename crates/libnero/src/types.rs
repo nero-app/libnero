@@ -2,10 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::bail;
 use nero_extensions::types::MediaResource;
-use nero_media_proxy::{
-    MediaProxy,
-    resources::{Resource, ResourceData, ResourceKind},
-};
+use nero_media_proxy::{MediaProxy, resources::Resource};
 use serde::{Deserialize, Serialize};
 use url::Url;
 use uuid::Uuid;
@@ -78,10 +75,7 @@ impl AsyncTryFromWithProxy<nero_extensions::types::Series> for Series {
             poster_url: match series.poster_resource {
                 Some(MediaResource::HttpRequest(req)) => {
                     let id = Uuid::new_v4().to_string();
-                    let resource = Resource {
-                        kind: ResourceKind::Image,
-                        data: ResourceData::Http(req),
-                    };
+                    let resource = Resource::Http(req);
                     Some(proxy.resource_store().insert(id, resource).await?)
                 }
                 Some(MediaResource::MagnetUri(_)) => {
@@ -117,10 +111,7 @@ impl AsyncTryFromWithProxy<nero_extensions::types::Episode> for Episode {
             thumbnail_url: match episode.thumbnail_resource {
                 Some(MediaResource::HttpRequest(req)) => {
                     let id = Uuid::new_v4().to_string();
-                    let resource = Resource {
-                        kind: ResourceKind::Image,
-                        data: ResourceData::Http(req),
-                    };
+                    let resource = Resource::Http(req);
                     Some(proxy.resource_store().insert(id, resource).await?)
                 }
                 Some(MediaResource::MagnetUri(_)) => {
@@ -150,10 +141,7 @@ impl AsyncTryFromWithProxy<nero_extensions::types::Video> for Video {
         let url = match video.media_resource {
             nero_extensions::types::MediaResource::HttpRequest(request) => {
                 let id = Uuid::new_v4().to_string();
-                let resource = Resource {
-                    kind: ResourceKind::Video,
-                    data: ResourceData::Http(request),
-                };
+                let resource = Resource::Http(request);
                 proxy.resource_store().insert(id, resource).await
             }
             #[cfg(not(feature = "torrent"))]
@@ -165,10 +153,7 @@ impl AsyncTryFromWithProxy<nero_extensions::types::Video> for Video {
                 use nero_media_proxy::torrent::TorrentSource;
 
                 let id = Uuid::new_v4().to_string();
-                let resource = Resource {
-                    kind: ResourceKind::Torrent,
-                    data: ResourceData::Torrent(TorrentSource::MagnetUri(uri)),
-                };
+                let resource = Resource::Torrent(TorrentSource::MagnetUri(uri));
                 proxy.resource_store().insert(id, resource).await
             }
         }?;
