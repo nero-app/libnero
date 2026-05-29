@@ -28,8 +28,8 @@ impl From<ExtensionOptions> for nero_extensions::ExtensionOptions {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Page<T> {
-    items: Vec<T>,
-    has_next_page: bool,
+    pub items: Vec<T>,
+    pub has_next_page: bool,
 }
 
 impl<T, U> AsyncTryFromWithProxy<nero_extensions::types::Page<T>> for Page<U>
@@ -57,11 +57,11 @@ pub type EpisodesPage = Page<Episode>;
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Series {
-    id: String,
-    title: String,
-    poster_url: Option<Url>,
-    synopsis: Option<String>,
-    r#type: Option<String>,
+    pub id: String,
+    pub title: String,
+    pub poster_url: Option<Url>,
+    pub synopsis: Option<String>,
+    pub r#type: Option<String>,
 }
 
 impl AsyncTryFromWithProxy<nero_extensions::types::Series> for Series {
@@ -92,11 +92,11 @@ impl AsyncTryFromWithProxy<nero_extensions::types::Series> for Series {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Episode {
-    id: String,
-    number: u16,
-    title: Option<String>,
-    thumbnail_url: Option<Url>,
-    description: Option<String>,
+    pub id: String,
+    pub number: u16,
+    pub title: Option<String>,
+    pub thumbnail_url: Option<Url>,
+    pub description: Option<String>,
 }
 
 impl AsyncTryFromWithProxy<nero_extensions::types::Episode> for Episode {
@@ -128,9 +128,9 @@ type Resolution = (u16, u16);
 
 #[derive(Debug, Serialize)]
 pub struct Video {
-    url: Url,
-    server: String,
-    resolution: Resolution,
+    pub url: Url,
+    pub server: String,
+    pub resolution: Resolution,
 }
 
 impl AsyncTryFromWithProxy<nero_extensions::types::Video> for Video {
@@ -169,8 +169,8 @@ impl AsyncTryFromWithProxy<nero_extensions::types::Video> for Video {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Filter {
-    id: String,
-    display_name: String,
+    pub id: String,
+    pub display_name: String,
 }
 
 impl From<nero_extensions::types::Filter> for Filter {
@@ -185,9 +185,9 @@ impl From<nero_extensions::types::Filter> for Filter {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FilterCategory {
-    id: String,
-    display_name: String,
-    filters: Vec<Filter>,
+    pub id: String,
+    pub display_name: String,
+    pub filters: Vec<Filter>,
 }
 
 impl From<nero_extensions::types::FilterCategory> for FilterCategory {
@@ -202,8 +202,8 @@ impl From<nero_extensions::types::FilterCategory> for FilterCategory {
 
 #[derive(Debug, Deserialize)]
 pub struct SearchFilter {
-    id: String,
-    values: Vec<String>,
+    pub id: String,
+    pub values: Vec<String>,
 }
 
 impl From<SearchFilter> for nero_extensions::types::SearchFilter {
