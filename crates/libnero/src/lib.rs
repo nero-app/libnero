@@ -1,19 +1,18 @@
 pub mod types;
 mod utils;
 
-use nero_media_proxy::MediaProxy;
+pub use nero_extensions::{Bucket, KeyResponse, Store, StoreError};
 pub use wasm_metadata::Metadata as ExtensionMetadata;
 
 use std::{path::Path, sync::Arc};
 
 use anyhow::bail;
 use nero_extensions::{Extension as ExtensionTrait, WasmExtension, WasmHost};
+use nero_media_proxy::MediaProxy;
 use wasm_metadata::Payload;
 
 use crate::{
-    types::{
-        EpisodesPage, ExtensionOptions, FilterCategory, SearchFilter, Series, SeriesPage, Video,
-    },
+    types::{EpisodesPage, FilterCategory, SearchFilter, Series, SeriesPage, Video},
     utils::AyncTryIntoWithProxy,
 };
 
@@ -37,12 +36,9 @@ impl ExtensionHost {
     pub async fn load(
         &self,
         file_path: impl AsRef<Path>,
-        options: ExtensionOptions,
+        keyvalue: Arc<dyn Store>,
     ) -> anyhow::Result<Extension> {
-        let extension = self
-            .host
-            .load_extension_async(file_path, options.into())
-            .await?;
+        let extension = self.host.load_extension_async(file_path, keyvalue).await?;
 
         Ok(Extension {
             inner: extension,

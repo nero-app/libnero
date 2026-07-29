@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use anyhow::bail;
 use nero_extensions::types::MediaResource;
 use nero_media_proxy::{MediaProxy, resources::Resource};
@@ -8,22 +6,6 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::utils::AsyncTryFromWithProxy;
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExtensionOptions {
-    pub cache_dir: PathBuf,
-    pub max_cache_size: Option<u64>,
-}
-
-impl From<ExtensionOptions> for nero_extensions::ExtensionOptions {
-    fn from(options: ExtensionOptions) -> Self {
-        Self {
-            cache_dir: options.cache_dir,
-            max_cache_size: options.max_cache_size,
-        }
-    }
-}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

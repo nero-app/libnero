@@ -1,7 +1,7 @@
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
-use nero_keyvalue_ttl::{KeyValueTTL, KeyValueTTLCtx, KeyValueTTLView};
+use nero_keyvalue_ttl::{KeyValueTTL, KeyValueTTLCtx, KeyValueTTLView, Store as KeyValueTTLStore};
 use semver::Version;
 use wasm_metadata::Metadata;
 use wasmtime::{Store, component::Component};
@@ -57,11 +57,6 @@ impl KeyValueTTLView for WasmState {
     }
 }
 
-pub struct ExtensionOptions {
-    pub cache_dir: PathBuf,
-    pub max_cache_size: Option<u64>,
-}
-
 pub struct WasmExtension {
     extension_pre: ExtensionPre,
     metadata: Arc<Metadata>,
@@ -73,7 +68,7 @@ impl WasmExtension {
         version: Version,
         component: &Component,
         metadata: Metadata,
-        options: ExtensionOptions,
+        keyvalue: Arc<dyn KeyValueTTLStore>,
     ) -> Result<Self> {
         let extension_pre = match version {
             v if v >= *since_v0_1_0_draft::MIN_VER => {
@@ -86,12 +81,10 @@ impl WasmExtension {
             _ => Err(anyhow!("unsupported extension version")),
         }?;
 
-        let kv_ctx = KeyValueTTLCtx::new(options.cache_dir, options.max_cache_size).await?;
-
         Ok(Self {
             extension_pre,
             metadata: Arc::new(metadata),
-            keyvalue_ctx: Arc::new(kv_ctx),
+            keyvalue_ctx: Arc::new(KeyValueTTLCtx::new(keyvalue)),
         })
     }
 

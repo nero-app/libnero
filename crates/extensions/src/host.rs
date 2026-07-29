@@ -3,7 +3,11 @@ use std::path::Path;
 use wasm_metadata::Payload;
 use wasmtime::{Engine, component::Component};
 
-use crate::extension::{ExtensionOptions, WasmExtension};
+use std::sync::Arc;
+
+use nero_keyvalue_ttl::Store;
+
+use crate::extension::WasmExtension;
 
 pub struct WasmHost {
     engine: Engine,
@@ -26,7 +30,7 @@ impl WasmHost {
     pub async fn load_extension_async<P: AsRef<Path>>(
         &self,
         path: P,
-        options: ExtensionOptions,
+        keyvalue: Arc<dyn Store>,
     ) -> wasmtime::Result<WasmExtension> {
         let path = path.as_ref();
 
@@ -39,7 +43,7 @@ impl WasmHost {
         };
 
         let extension =
-            WasmExtension::instantiate_async(version, &component, metadata, options).await?;
+            WasmExtension::instantiate_async(version, &component, metadata, keyvalue).await?;
 
         Ok(extension)
     }

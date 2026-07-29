@@ -5,8 +5,10 @@ mod wit;
 
 use std::sync::Arc;
 
-pub use extension::{ExtensionOptions, WasmExtension};
+pub use extension::WasmExtension;
 pub use host::WasmHost;
+
+pub use nero_keyvalue_ttl::{Bucket, Error as StoreError, KeyResponse, Store};
 
 use anyhow::Result;
 use wasm_metadata::Metadata;

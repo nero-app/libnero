@@ -1,10 +1,9 @@
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Result;
-use nero_file_store::Error as FileStoreError;
-use nero_file_store::FileStore;
-use tokio::task::spawn_blocking;
 use wasmtime::component::{HasData, Resource, ResourceTable, ResourceTableError};
+
+pub use self::keyvalue_ttl::store::KeyResponse;
 
 pub use self::generated::nero::*;
 
@@ -14,7 +13,7 @@ mod generated {
         world: "nero:keyvalue-ttl/imports",
         imports: { default: async | trappable },
         with: {
-            "nero:keyvalue-ttl/store/bucket": crate::Bucket,
+            "nero:keyvalue-ttl/store/bucket": crate::OpenBucket,
         },
         trappable_error_type: {
             "nero:keyvalue-ttl/store/error" => crate::Error,
@@ -36,33 +35,36 @@ impl From<ResourceTableError> for Error {
     }
 }
 
-impl From<FileStoreError> for Error {
-    fn from(err: FileStoreError) -> Self {
-        match err {
-            FileStoreError::StorageLimitExceeded => Self::StorageLimitExceeded,
-            FileStoreError::Io(e) => Self::Other(e.to_string()),
-            FileStoreError::Corrupt(msg) => Self::Other(msg),
-        }
-    }
+#[async_trait::async_trait]
+pub trait Store: Send + Sync {
+    async fn open(&self, identifier: &str) -> Result<Arc<dyn Bucket>, Error>;
 }
 
-pub struct Bucket;
+#[async_trait::async_trait]
+pub trait Bucket: Send + Sync {
+    async fn get(&self, key: &str) -> Result<Option<Vec<u8>>, Error>;
+
+    async fn set(&self, key: &str, value: Vec<u8>, ttl_ms: Option<u32>) -> Result<(), Error>;
+
+    async fn delete(&self, key: &str) -> Result<(), Error>;
+
+    async fn exists(&self, key: &str) -> Result<bool, Error>;
+
+    async fn list_keys(&self, cursor: Option<&str>) -> Result<KeyResponse, Error>;
+}
 
 pub struct KeyValueTTLCtx {
-    store: Arc<FileStore>,
+    store: Arc<dyn Store>,
 }
 
 impl KeyValueTTLCtx {
-    pub async fn new(root: PathBuf, max_bytes: Option<u64>) -> Result<Self> {
-        let store = spawn_blocking(move || FileStore::new(root, max_bytes))
-            .await
-            .unwrap()?;
-
-        Ok(Self {
-            store: Arc::new(store),
-        })
+    pub fn new(store: Arc<dyn Store>) -> Self {
+        Self { store }
     }
 }
+
+#[doc(hidden)]
+pub struct OpenBucket(Arc<dyn Bucket>);
 
 pub struct KeyValueTTL<'a> {
     ctx: &'a KeyValueTTLCtx,
@@ -76,11 +78,9 @@ impl<'a> KeyValueTTL<'a> {
 }
 
 impl keyvalue_ttl::store::Host for KeyValueTTL<'_> {
-    async fn open(&mut self, identifier: String) -> Result<Resource<Bucket>, Error> {
-        if !identifier.is_empty() {
-            return Err(Error::NoSuchBucket);
-        }
-        Ok(self.table.push(Bucket)?)
+    async fn open(&mut self, identifier: String) -> Result<Resource<OpenBucket>, Error> {
+        let bucket = self.ctx.store.open(&identifier).await?;
+        Ok(self.table.push(OpenBucket(bucket))?)
     }
 
     fn convert_error(&mut self, err: Error) -> Result<keyvalue_ttl::store::Error> {
@@ -96,53 +96,43 @@ impl keyvalue_ttl::store::Host for KeyValueTTL<'_> {
 impl keyvalue_ttl::store::HostBucket for KeyValueTTL<'_> {
     async fn get(
         &mut self,
-        _bucket: Resource<Bucket>,
+        bucket: Resource<OpenBucket>,
         key: String,
     ) -> Result<Option<Vec<u8>>, Error> {
-        let store = self.ctx.store.clone();
-        Ok(spawn_blocking(move || store.get(&key)).await.unwrap()?)
+        Arc::clone(&self.table.get(&bucket)?.0).get(&key).await
     }
 
     async fn set(
         &mut self,
-        _bucket: Resource<Bucket>,
+        bucket: Resource<OpenBucket>,
         key: String,
         value: Vec<u8>,
         ttl_ms: Option<u32>,
     ) -> Result<(), Error> {
-        let store = self.ctx.store.clone();
-        Ok(spawn_blocking(move || store.set(&key, value, ttl_ms))
+        Arc::clone(&self.table.get(&bucket)?.0)
+            .set(&key, value, ttl_ms)
             .await
-            .unwrap()?)
     }
 
-    async fn delete(&mut self, _bucket: Resource<Bucket>, key: String) -> Result<(), Error> {
-        let store = self.ctx.store.clone();
-        Ok(spawn_blocking(move || store.delete(&key)).await.unwrap()?)
+    async fn delete(&mut self, bucket: Resource<OpenBucket>, key: String) -> Result<(), Error> {
+        Arc::clone(&self.table.get(&bucket)?.0).delete(&key).await
     }
 
-    async fn exists(&mut self, _bucket: Resource<Bucket>, key: String) -> Result<bool, Error> {
-        let store = self.ctx.store.clone();
-        Ok(spawn_blocking(move || store.exists(&key)).await.unwrap()?)
+    async fn exists(&mut self, bucket: Resource<OpenBucket>, key: String) -> Result<bool, Error> {
+        Arc::clone(&self.table.get(&bucket)?.0).exists(&key).await
     }
 
     async fn list_keys(
         &mut self,
-        _bucket: Resource<Bucket>,
+        bucket: Resource<OpenBucket>,
         cursor: Option<String>,
-    ) -> Result<keyvalue_ttl::store::KeyResponse, Error> {
-        let store = self.ctx.store.clone();
-        let result = spawn_blocking(move || store.list_keys(cursor.as_deref()))
+    ) -> Result<KeyResponse, Error> {
+        Arc::clone(&self.table.get(&bucket)?.0)
+            .list_keys(cursor.as_deref())
             .await
-            .unwrap()?;
-
-        Ok(keyvalue_ttl::store::KeyResponse {
-            keys: result.0,
-            cursor: result.1,
-        })
     }
 
-    async fn drop(&mut self, bucket: Resource<Bucket>) -> wasmtime::Result<()> {
+    async fn drop(&mut self, bucket: Resource<OpenBucket>) -> wasmtime::Result<()> {
         self.table.delete(bucket)?;
         Ok(())
     }
