@@ -1,0 +1,181 @@
+/// The `interaction` interface provides a set of functions to request values
+/// from, and present information to, the person operating the host
+/// application.
+///
+/// Nothing here describes how a request is presented. Callers must not assume
+/// any particular presentation.
+///
+/// A function that requests a value waits until the host supplies an answer or
+/// determines that none will be supplied. The latter is reported as `none`
+/// rather than as an error and may mean, for example, that the person dismissed
+/// the request, that the host could not present it, or that the host declined to
+/// do so. Callers must treat an unanswered request as an ordinary outcome.
+interface interaction {
+    use wasi:io/poll@0.2.7.{pollable};
+
+    /// How important an interaction is. A host may use this to decide how, or
+    /// whether, to present it.
+    enum severity {
+        info,
+        warning,
+        error,
+    }
+
+    /// A request for a single line of text.
+    record text-request {
+        /// A short heading naming what is being asked for.
+        title: string,
+
+        /// A fuller description of what is being asked for, and of what
+        /// constitutes an acceptable answer.
+        description: option<string>,
+
+        /// An example of the expected form, presented in place of an empty
+        /// answer. It is never returned as a value.
+        placeholder: option<string>,
+
+        /// An answer to start from, allowing an existing value to be amended
+        /// rather than retyped.
+        initial-value: option<string>,
+
+        /// Whether the value is sensitive.
+        ///
+        /// When set, the host must conceal the value as it is given, must not
+        /// write it to logs or diagnostics, and must not retain it in any
+        /// history of past answers. This constrains the host only; the caller
+        /// receives the value in the clear and is responsible for it
+        /// thereafter.
+        sensitive: bool,
+
+        /// A location where the person can find out how to obtain the value,
+        /// which the host may present alongside the request.
+        reference: option<string>,
+    }
+
+    /// Asks for a single line of text.
+    ///
+    /// * `request`: What is being asked for.
+    ///
+    /// Returns the value that was given, which may be empty, or `none` if the
+    /// request went unanswered.
+    ///
+    /// A host does not check the value beyond what it needs to present the
+    /// request. A caller that requires a particular form must check the value
+    /// itself, and may ask again with a `description` explaining what was
+    /// wrong.
+    request-text: func(request: text-request) -> option<string>;
+
+    /// One of the answers offered by a selection request.
+    record choice-item {
+        /// The primary text naming this answer.
+        label: string,
+
+        /// Supporting text distinguishing this answer from the others. A host
+        /// may omit it where there is no room to present it.
+        detail: option<string>,
+
+        /// Whether this answer should initially be selected. This is a
+        /// presentation hint that the host may ignore.
+        preselected: bool,
+    }
+
+    /// A request to choose among a fixed set of answers.
+    record selection-request {
+        /// A short heading naming what is being decided.
+        title: string,
+
+        /// A fuller description of the decision.
+        description: option<string>,
+
+        /// How important the decision is.
+        %severity: severity,
+
+        /// The answers offered, in the order they should be presented. This
+        /// list must not be empty.
+        choices: list<choice-item>,
+
+        /// Whether more than one answer may be chosen.
+        allow-multiple: bool,
+    }
+
+    /// Asks for a choice among a fixed set of answers.
+    ///
+    /// * `request`: The decision and the answers offered.
+    ///
+    /// This function traps if `request.choices` is empty.
+    ///
+    /// Returns the indices into `request.choices` of the answers that were
+    /// chosen, or `none` if the request went unanswered. Every returned index
+    /// refers to an entry in `request.choices` and occurs at most once; their
+    /// order is unspecified. The list contains at most one index when
+    /// `request.allow-multiple` is unset. Whether an answered request may
+    /// contain no selected choices is determined by the host.
+    request-selection: func(request: selection-request) -> option<list<u32>>;
+
+    /// States something without asking for anything.
+    ///
+    /// This returns as soon as the host has taken the message; it does not
+    /// wait for the message to be seen. A host may discard or suppress
+    /// messages. Callers must not depend on a message having been read, and
+    /// must not convey through it anything their own correctness rests on.
+    ///
+    /// * `severity`: How important the message is.
+    /// * `message`: What is being stated.
+    /// * `detail`: Supporting text. A host may omit it.
+    notify: func(%severity: severity, message: string, detail: option<string>);
+
+    /// A standing indication that work is under way, and optionally a means
+    /// of asking for it to stop.
+    ///
+    /// The indication begins when the resource is constructed and lasts for as
+    /// long as it is alive; a host may wait a short while before presenting
+    /// anything, so that short-lived work is not announced. A caller must drop
+    /// the resource once the work has ended, whether or not it succeeded.
+    /// Failing to do so leaves the indication in place: nothing is interrupted
+    /// and no error is raised, but the person is told work continues that has
+    /// already finished.
+    resource progress {
+        /// Announces that work has begun.
+        ///
+        /// * `title`: A short description of the work. It stays as given for
+        ///   the lifetime of the indication.
+        /// * `cancellable`: Whether the host offers a way to ask for the work
+        ///   to stop. When unset, the pollable returned by
+        ///   `subscribe-cancellation` never becomes ready.
+        constructor(title: string, cancellable: bool);
+
+        /// Revises the indication. May be called as often as the caller likes
+        /// for as long as the resource is alive, including after the work has
+        /// been asked to stop.
+        ///
+        /// * `message`: Replacement text describing the current step, or
+        ///   `none` to leave it as it was.
+        /// * `percent`: How much of the work is done, from zero to one
+        ///   hundred, or `none` to leave the extent unstated. What counts as
+        ///   the whole is for the caller to decide; the host presents the
+        ///   fraction without interpreting it. Values above one hundred are
+        ///   treated as one hundred.
+        ///
+        /// When no extent is stated, the host indicates only that the work
+        /// continues.
+        report: func(message: option<string>, percent: option<u8>);
+
+        /// Returns a pollable which becomes ready once the work has been asked
+        /// to stop. May be called more than once; every pollable so returned
+        /// becomes ready at the same moment.
+        ///
+        /// Nothing is interrupted, and the work is not asked to stop again.
+        /// The caller observes this and stops of its own accord, so that it
+        /// can release what it holds. A caller that ignores it is not obliged
+        /// to stop.
+        ///
+        /// The pollable can be waited on together with whatever else the
+        /// caller is waiting for, so that cancellation is noticed without
+        /// abandoning the wait.
+        ///
+        /// The returned `pollable` is a child resource of this `progress` and
+        /// must be dropped before it. Dropping the `progress` while a child
+        /// pollable is still alive traps.
+        subscribe-cancellation: func() -> pollable;
+    }
+}

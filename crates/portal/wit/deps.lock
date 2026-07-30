@@ -1,0 +1,14 @@
+[clocks]
+sha256 = "d0a8d048c41b566b978cd8ecd03fa51ec1f65af4c26be2f0fc9cfdd7dd6f34f3"
+sha512 = "8d1c9ddaaea70ae54376bfc02dcdd0437336fb4fc67f89763ce09540caefe84cbae89a8de3605aa7613c49188636e925047bcd150c2c60685850095fefb68b73"
+
+[io]
+sha256 = "62ae80f2e340cddbac8e94f78e6270735aea536367ecb98de5f4ac6aef66b5c4"
+sha512 = "a02a1ebd261ae884b0315b3528d1a93819ddc4b616f66c77f2bea9dd1de888208dc3b9004a553363f5e8491ea925d65ebbd0d68eaa87238316b47469a3bf97bb"
+
+[portal]
+url = "https://github.com/dacchidocchi/nero-extension/archive/main.tar.gz"
+prefix = "nero-extension-main/definitions/portal"
+sha256 = "5f4ecded85440edd67b5cde73b2be4f27426080303ce89e703e7873b51832181"
+sha512 = "3683302afb23bf507eda88d8629c87132e13841d06cdbaa7875ee94debef98cb3d84f4bb06bab603b8a0c2c5b7ce1bf13bc45c8450b90a3931c7ed0f7ae6105a"
+deps = ["clocks", "io"]

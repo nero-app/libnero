@@ -5,6 +5,7 @@ members = [
     "crates/libnero",
     "crates/media-proxy",
     "crates/keyvalue-ttl",
+    "crates/portal",
     "crates/wasi-logging",
 ]
 

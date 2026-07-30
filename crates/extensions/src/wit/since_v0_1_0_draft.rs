@@ -34,6 +34,7 @@ bindgen!({
         "wasi:http": wasmtime_wasi_http::bindings::http,
         "wasi:logging": nero_wasi_logging::logging,
         "nero:keyvalue-ttl": nero_keyvalue_ttl::keyvalue_ttl,
+        "nero:portal": nero_portal::portal,
     },
 });
 
@@ -43,6 +44,7 @@ pub fn linker(engine: &Engine) -> Result<Linker<WasmState>> {
     wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker).unwrap();
     nero_wasi_logging::add_to_linker(&mut linker).unwrap();
     nero_keyvalue_ttl::add_to_linker(&mut linker).unwrap();
+    nero_portal::add_to_linker(&mut linker).unwrap();
 
     Ok(linker)
 }

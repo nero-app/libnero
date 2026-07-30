@@ -6,6 +6,7 @@ use wasmtime::{Engine, component::Component};
 use std::sync::Arc;
 
 use nero_keyvalue_ttl::Store;
+use nero_portal::{CallbackTransport, Interaction, Opener};
 
 use crate::extension::WasmExtension;
 
@@ -31,6 +32,9 @@ impl WasmHost {
         &self,
         path: P,
         keyvalue: Arc<dyn Store>,
+        interaction: Arc<dyn Interaction>,
+        opener: Arc<dyn Opener>,
+        callbacks: Arc<dyn CallbackTransport>,
     ) -> wasmtime::Result<WasmExtension> {
         let path = path.as_ref();
 
@@ -42,8 +46,16 @@ impl WasmHost {
             Payload::Module(..) => unreachable!(),
         };
 
-        let extension =
-            WasmExtension::instantiate_async(version, &component, metadata, keyvalue).await?;
+        let extension = WasmExtension::instantiate_async(
+            version,
+            &component,
+            metadata,
+            keyvalue,
+            interaction,
+            opener,
+            callbacks,
+        )
+        .await?;
 
         Ok(extension)
     }

@@ -4,6 +4,11 @@ mod utils;
 pub use nero_extensions::{Bucket, KeyResponse, Store, StoreError};
 pub use wasm_metadata::Metadata as ExtensionMetadata;
 
+pub use nero_extensions::{
+    CallbackTransport, Cancel, ChoiceItem, Delivery, Interaction, ListenError, Opener,
+    ProgressHandle, SelectionRequest, Severity, TextRequest,
+};
+
 use std::{path::Path, sync::Arc};
 
 use anyhow::bail;
@@ -37,8 +42,14 @@ impl ExtensionHost {
         &self,
         file_path: impl AsRef<Path>,
         keyvalue: Arc<dyn Store>,
+        interaction: Arc<dyn Interaction>,
+        opener: Arc<dyn Opener>,
+        callbacks: Arc<dyn CallbackTransport>,
     ) -> anyhow::Result<Extension> {
-        let extension = self.host.load_extension_async(file_path, keyvalue).await?;
+        let extension = self
+            .host
+            .load_extension_async(file_path, keyvalue, interaction, opener, callbacks)
+            .await?;
 
         Ok(Extension {
             inner: extension,

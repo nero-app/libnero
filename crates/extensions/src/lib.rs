@@ -9,6 +9,10 @@ pub use extension::WasmExtension;
 pub use host::WasmHost;
 
 pub use nero_keyvalue_ttl::{Bucket, Error as StoreError, KeyResponse, Store};
+pub use nero_portal::{
+    CallbackTransport, Cancel, ChoiceItem, Delivery, Interaction, ListenError, Opener,
+    ProgressHandle, SelectionRequest, Severity, TextRequest,
+};
 
 use anyhow::Result;
 use wasm_metadata::Metadata;

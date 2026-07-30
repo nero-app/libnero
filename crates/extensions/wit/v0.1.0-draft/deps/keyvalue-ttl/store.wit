@@ -50,7 +50,6 @@ interface store {
         access-denied,
 
         /// The bucket has reached its storage limit (implementation-specific).
-        /// Some implementations may enforce storage quotas per bucket.
         storage-limit-exceeded,
 
         /// Some implementation-specific error has occurred (e.g. I/O, serialization).

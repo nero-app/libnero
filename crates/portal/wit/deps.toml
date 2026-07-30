@@ -1,0 +1,1 @@
+portal = { url = "https://github.com/dacchidocchi/nero-extension/archive/main.tar.gz", prefix = "nero-extension-main/definitions/portal" }

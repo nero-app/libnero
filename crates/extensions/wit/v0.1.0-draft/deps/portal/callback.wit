@@ -1,0 +1,106 @@
+/// The `callback` interface provides a means of being reached from outside the
+/// host application: an address the host sets aside for the caller, and the
+/// delivery of a single URI directed at it.
+///
+/// Nothing here causes a URI to be sent. Arranging that is the caller's
+/// business — handing the address to a service that is to return to it, or to
+/// a person who will follow a link.
+///
+/// A host may have no way of being reached from outside itself. That is not
+/// exceptional, and callers are expected to carry on without.
+interface callback {
+    use wasi:clocks/monotonic-clock@0.2.7.{duration};
+    use wasi:io/poll@0.2.7.{pollable};
+
+    /// Why a listener could not be established.
+    variant listen-error {
+        /// This host cannot be reached from outside itself, so no address it
+        /// set aside would be of any use. This is a standing property of the
+        /// host rather than a fault, and a caller that needs to be reached
+        /// should turn to some other means.
+        unsupported,
+
+        /// The host failed to listen, for a reason described by the payload.
+        /// The string is meant for diagnostics; its contents are unspecified
+        /// and callers must not depend on them.
+        other(string),
+    }
+
+    /// Why nothing was delivered.
+    variant receive-error {
+        /// The timeout elapsed with nothing delivered.
+        expired,
+
+        /// Whoever was to deliver gave up, for a reason described by the
+        /// payload. The string is meant for diagnostics; its contents are
+        /// unspecified and callers must not depend on them.
+        other(string),
+    }
+
+    /// An address set aside for the caller, and the means of receiving a
+    /// single URI delivered to it.
+    ///
+    /// The host decides whether the address is stable or variable. It may
+    /// expose a stable, pre-registerable address scoped to the caller, or
+    /// issue a different address for each listener. A caller cannot choose or
+    /// influence the address it is given, and must not assume that it can be
+    /// reused after the listener is dropped unless the host documents that
+    /// guarantee.
+    ///
+    /// A listener is listening from the moment it exists, which is before its
+    /// address can be read. A URI may be delivered the moment the address is
+    /// known to anyone else, and a listener established after the fact would
+    /// miss it.
+    resource listener {
+        /// Sets aside an address and begins listening.
+        ///
+        /// * `timeout`: How long to listen before giving up with
+        ///   `receive-error::expired`.
+        ///
+        /// Returns a listener, or the reason one could not be established.
+        listen: static func(timeout: duration) -> result<listener, listen-error>;
+
+        /// Returns the absolute URI that must be used to reach this
+        /// listener.
+        ///
+        /// The returned string is a syntactically valid absolute URI. It does
+        /// not change for as long as the listener exists, and this method may
+        /// be called as often as the caller likes, including after the listener
+        /// has become ready.
+        address: func() -> string;
+
+        /// Returns a pollable which becomes ready once a URI has been
+        /// delivered or the listener has given up. May be called more than
+        /// once; every pollable so returned becomes ready at the same moment.
+        ///
+        /// The pollable can be passed to `wasi:io/poll.poll` together with other
+        /// pollables, allowing other events to be observed without abandoning
+        /// the wait for a callback.
+        ///
+        /// The returned `pollable` is a child resource of this `listener` and
+        /// must be dropped before it. Dropping the `listener` while a child
+        /// pollable is still alive traps.
+        subscribe: func() -> pollable;
+
+        /// Returns the URI that was delivered, once the listener is ready.
+        ///
+        /// The outer `option` stands for readiness; callers can wait on it
+        /// becoming `some` using `subscribe`. The outer `result` allows the
+        /// value to be taken at most once: it is success on the first call in
+        /// which the outer option is `some`, and an error on every call after
+        /// that.
+        ///
+        /// The inner `result` represents either the URI that was delivered or
+        /// the reason nothing was delivered.
+        ///
+        /// The URI is returned whole, with everything it carried, including
+        /// any fragment. A fragment is not transmitted when a URI is fetched
+        /// over a network protocol, so a host that listens by serving its
+        /// address must recover the fragment by some other means; callers may
+        /// count on it being present.
+        ///
+        /// A listener takes delivery at most once. Further deliveries are not
+        /// delivered through this listener.
+        get: func() -> option<result<result<string, receive-error>>>;
+    }
+}

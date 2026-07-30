@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
 use nero_keyvalue_ttl::{KeyValueTTL, KeyValueTTLCtx, KeyValueTTLView, Store as KeyValueTTLStore};
+use nero_portal::{CallbackTransport, Interaction, Opener, Portal, PortalCtx, PortalView};
 use semver::Version;
 use wasm_metadata::Metadata;
 use wasmtime::{Store, component::Component};
@@ -14,20 +15,25 @@ use crate::{
     wit::{ExtensionPre, since_v0_1_0_draft},
 };
 
+struct ExtensionCtx {
+    keyvalue: KeyValueTTLCtx,
+    portal: PortalCtx,
+}
+
 pub struct WasmState {
     table: ResourceTable,
     ctx: WasiCtx,
     http_ctx: WasiHttpCtx,
-    keyvalue_ctx: Arc<KeyValueTTLCtx>,
+    extension_ctx: Arc<ExtensionCtx>,
 }
 
 impl WasmState {
-    pub fn new(keyvalue_ctx: Arc<KeyValueTTLCtx>) -> Self {
+    fn new(extension_ctx: Arc<ExtensionCtx>) -> Self {
         Self {
             table: ResourceTable::new(),
             ctx: WasiCtx::builder().build(),
             http_ctx: WasiHttpCtx::new(),
-            keyvalue_ctx,
+            extension_ctx,
         }
     }
 }
@@ -53,14 +59,20 @@ impl WasiHttpView for WasmState {
 
 impl KeyValueTTLView for WasmState {
     fn keyvalue_ttl(&mut self) -> KeyValueTTL<'_> {
-        KeyValueTTL::new(&self.keyvalue_ctx, &mut self.table)
+        KeyValueTTL::new(&self.extension_ctx.keyvalue, &mut self.table)
+    }
+}
+
+impl PortalView for WasmState {
+    fn portal(&mut self) -> Portal<'_> {
+        Portal::new(&self.extension_ctx.portal, &mut self.table)
     }
 }
 
 pub struct WasmExtension {
     extension_pre: ExtensionPre,
     metadata: Arc<Metadata>,
-    keyvalue_ctx: Arc<KeyValueTTLCtx>,
+    extension_ctx: Arc<ExtensionCtx>,
 }
 
 impl WasmExtension {
@@ -69,6 +81,9 @@ impl WasmExtension {
         component: &Component,
         metadata: Metadata,
         keyvalue: Arc<dyn KeyValueTTLStore>,
+        interaction: Arc<dyn Interaction>,
+        opener: Arc<dyn Opener>,
+        callbacks: Arc<dyn CallbackTransport>,
     ) -> Result<Self> {
         let extension_pre = match version {
             v if v >= *since_v0_1_0_draft::MIN_VER => {
@@ -84,7 +99,10 @@ impl WasmExtension {
         Ok(Self {
             extension_pre,
             metadata: Arc::new(metadata),
-            keyvalue_ctx: Arc::new(KeyValueTTLCtx::new(keyvalue)),
+            extension_ctx: Arc::new(ExtensionCtx {
+                keyvalue: KeyValueTTLCtx::new(keyvalue),
+                portal: PortalCtx::new(interaction, opener, callbacks),
+            }),
         })
     }
 
@@ -118,7 +136,7 @@ impl Extension for WasmExtension {
     async fn filters(&self) -> Result<Vec<FilterCategory>> {
         let mut store = Store::new(
             self.extension_pre.engine(),
-            WasmState::new(self.keyvalue_ctx.clone()),
+            WasmState::new(self.extension_ctx.clone()),
         );
 
         let extension = self.extension_pre.instantiate_async(&mut store).await?;
@@ -133,7 +151,7 @@ impl Extension for WasmExtension {
     ) -> Result<SeriesPage> {
         let mut store = Store::new(
             self.extension_pre.engine(),
-            WasmState::new(self.keyvalue_ctx.clone()),
+            WasmState::new(self.extension_ctx.clone()),
         );
 
         let extension = self.extension_pre.instantiate_async(&mut store).await?;
@@ -143,7 +161,7 @@ impl Extension for WasmExtension {
     async fn get_series_info(&self, series_id: &str) -> Result<Series> {
         let mut store = Store::new(
             self.extension_pre.engine(),
-            WasmState::new(self.keyvalue_ctx.clone()),
+            WasmState::new(self.extension_ctx.clone()),
         );
 
         let extension = self.extension_pre.instantiate_async(&mut store).await?;
@@ -157,7 +175,7 @@ impl Extension for WasmExtension {
     ) -> Result<EpisodesPage> {
         let mut store = Store::new(
             self.extension_pre.engine(),
-            WasmState::new(self.keyvalue_ctx.clone()),
+            WasmState::new(self.extension_ctx.clone()),
         );
 
         let extension = self.extension_pre.instantiate_async(&mut store).await?;
@@ -167,7 +185,7 @@ impl Extension for WasmExtension {
     async fn get_series_videos(&self, series_id: &str, episode_id: &str) -> Result<Vec<Video>> {
         let mut store = Store::new(
             self.extension_pre.engine(),
-            WasmState::new(self.keyvalue_ctx.clone()),
+            WasmState::new(self.extension_ctx.clone()),
         );
 
         let extension = self.extension_pre.instantiate_async(&mut store).await?;
