@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::utils::AsyncTryFromWithProxy;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Page<T> {
     pub items: Vec<T>,
@@ -36,7 +36,7 @@ where
 pub type SeriesPage = Page<Series>;
 pub type EpisodesPage = Page<Episode>;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Series {
     pub id: String,
@@ -71,7 +71,7 @@ impl AsyncTryFromWithProxy<nero_extensions::types::Series> for Series {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Episode {
     pub id: String,
@@ -108,7 +108,7 @@ impl AsyncTryFromWithProxy<nero_extensions::types::Episode> for Episode {
 
 type Resolution = (u16, u16);
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Video {
     pub url: Url,
     pub server: String,
@@ -148,7 +148,7 @@ impl AsyncTryFromWithProxy<nero_extensions::types::Video> for Video {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Filter {
     pub id: String,
@@ -164,7 +164,7 @@ impl From<nero_extensions::types::Filter> for Filter {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FilterCategory {
     pub id: String,
@@ -182,7 +182,7 @@ impl From<nero_extensions::types::FilterCategory> for FilterCategory {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SearchFilter {
     pub id: String,
     pub values: Vec<String>,
