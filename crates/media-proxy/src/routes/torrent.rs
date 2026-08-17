@@ -1,4 +1,6 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
+#[cfg(feature = "torrent-librqbit")]
+use std::time::Duration;
 
 use axum::{
     body::Body,
@@ -81,6 +83,17 @@ pub async fn handle_torrent_stream_request(
 
     let (parts, _body) = incoming_request.into_parts();
 
+    #[cfg(not(feature = "torrent-librqbit"))]
+    return backend
+        .handle_stream_request(
+            &torrent_id,
+            file_index,
+            Request::from_parts(parts, Body::empty()),
+        )
+        .await
+        .map_err(Into::into);
+
+    #[cfg(feature = "torrent-librqbit")]
     // TODO: any better way to do this?
     loop {
         match backend
