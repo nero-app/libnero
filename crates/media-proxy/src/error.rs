@@ -11,9 +11,6 @@ pub enum Error {
     #[error("Reqwest HTTP error: {0}")]
     Reqwest(#[from] reqwest::Error),
 
-    #[error("Remote server returned status {0}")]
-    RemoteServer(StatusCode),
-
     #[cfg(feature = "torrent")]
     #[error("Torrent support is disabled")]
     TorrentSupportDisabled,
@@ -21,9 +18,6 @@ pub enum Error {
     #[cfg(feature = "torrent")]
     #[error("Torrent error: {0}")]
     TorrentBackend(#[from] anyhow::Error),
-
-    #[error("Invalid resource kind")]
-    InvalidResourceKind,
 }
 
 impl IntoResponse for Error {
@@ -32,10 +26,6 @@ impl IntoResponse for Error {
             Error::NotFound => StatusCode::NOT_FOUND,
             Error::Reqwest(_) => {
                 error!("Reqwest error: {:#}", self);
-                StatusCode::BAD_GATEWAY
-            }
-            Error::RemoteServer(code) => {
-                error!("Remote server returned status {}: {:#}", code, self);
                 StatusCode::BAD_GATEWAY
             }
             #[cfg(feature = "torrent")]
@@ -47,10 +37,6 @@ impl IntoResponse for Error {
             Error::TorrentBackend(e) => {
                 error!("Torrent backend error: {:#}", e);
                 StatusCode::INTERNAL_SERVER_ERROR
-            }
-            Error::InvalidResourceKind => {
-                error!("Invalid resource kind: {:#}", self);
-                StatusCode::BAD_REQUEST
             }
         };
 

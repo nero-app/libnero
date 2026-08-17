@@ -1,9 +1,7 @@
-mod image;
+mod media;
 #[cfg(feature = "torrent")]
 mod torrent;
-mod video;
 
-pub use image::*;
+pub use media::*;
 #[cfg(feature = "torrent")]
 pub use torrent::*;
-pub use video::*;

@@ -9,10 +9,7 @@ async-trait = { workspace = true, optional = true }
 axum = "0.8.6"
 bytes = { workspace = true }
 http = { workspace = true }
-infer = "0.19.0"
 librqbit = { version = "8.1.1", optional = true }
-mime = "0.3.17"
-mime_guess = "2.0.5"
 reqwest = { version = "0.12.23", features = ["stream"] }
 serde = { workspace = true }
 thiserror = "2.0.17"

@@ -5,6 +5,7 @@ use axum::{
     extract::{Path, State},
     response::Response,
 };
+use http::header::HOST;
 
 use crate::{
     ServerState,
@@ -13,30 +14,37 @@ use crate::{
     utils::{HopByHopHeadersExt, IntoReqwestRequest},
 };
 
-pub async fn handle_video_request(
+pub async fn handle_media_request(
     State(state): State<Arc<ServerState>>,
     Path(resource_id): Path<String>,
     incoming_request: axum::extract::Request,
 ) -> Result<Response, Error> {
     let resource = state
-        .resource_store
-        .get(&resource_id)
+        .resources
+        .read()
         .await
+        .get(&resource_id)
+        .cloned()
         .ok_or(Error::NotFound)?;
 
-    #[allow(irrefutable_let_patterns)]
-    let Resource::Http(mut stored_request) = resource else {
-        return Err(Error::InvalidResourceKind);
-    };
+    match resource {
+        Resource::Http(stored_request) => {
+            handle_http_request(state, stored_request, incoming_request).await
+        }
+        #[cfg(feature = "torrent")]
+        Resource::Torrent(source) => {
+            super::torrent::handle_torrent_resource(state, resource_id, source).await
+        }
+    }
+}
 
-    state
-        .current_video
-        .write()
-        .await
-        .replace(Resource::Http(stored_request.clone()));
-
-    for (name, value) in incoming_request.headers().iter() {
-        if name == http::header::HOST {
+async fn handle_http_request(
+    state: Arc<ServerState>,
+    mut stored_request: Box<crate::HttpRequest>,
+    incoming_request: axum::extract::Request,
+) -> Result<Response, Error> {
+    for (name, value) in incoming_request.headers() {
+        if name == HOST {
             continue;
         }
         stored_request
@@ -50,17 +58,10 @@ pub async fn handle_video_request(
     let response = state.http_client.execute(request).await?;
 
     let status = response.status();
-    if !status.is_success() {
-        return Err(Error::RemoteServer(status));
-    }
-
     let mut headers = response.headers().clone();
     headers.remove_hop_by_hop_headers();
 
-    let stream = response.bytes_stream();
-    let body = Body::from_stream(stream);
-
-    let mut response = Response::new(body);
+    let mut response = Response::new(Body::from_stream(response.bytes_stream()));
     *response.status_mut() = status;
     *response.headers_mut() = headers;
 

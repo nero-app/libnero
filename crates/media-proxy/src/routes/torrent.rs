@@ -7,75 +7,83 @@ use axum::{
 };
 use http::{Request, StatusCode, header::CONTENT_TYPE};
 
-use crate::{ServerState, error::Error, resources::Resource, torrent::AddTorrentOptions};
+use crate::{
+    ServerState,
+    error::Error,
+    torrent::{AddTorrentOptions, Torrent, TorrentSource},
+};
 
-pub async fn handle_torrent_request(
-    State(state): State<Arc<ServerState>>,
-    Path(resource_id): Path<String>,
+pub(super) async fn handle_torrent_resource(
+    state: Arc<ServerState>,
+    resource_id: String,
+    source: TorrentSource,
 ) -> Result<Response, Error> {
-    let resource = state
-        .resource_store
-        .get(&resource_id)
-        .await
-        .ok_or(Error::NotFound)?;
-
     let backend = state
         .torrent_backend
         .as_ref()
         .ok_or(Error::TorrentSupportDisabled)?;
 
-    #[allow(irrefutable_let_patterns)]
-    let Resource::Torrent(source) = resource else {
-        return Err(Error::InvalidResourceKind);
-    };
-
+    let torrent = if let Some(torrent) = state
+        .active_torrents
+        .read()
+        .await
+        .get(&resource_id)
+        .cloned()
     {
-        let mut current = state.current_torrent.write().await;
-        if let Some(torrent) = current.take() {
-            backend.cancel_torrent(&torrent.id).await.ok();
-        }
-    }
-
-    let options = if let Some(selector) = &state.torrent_file_selector {
-        let files = backend.list_files(&source).await?;
-        let file_indices = selector.select(&files).await?;
-        Some(AddTorrentOptions { file_indices })
+        torrent
     } else {
-        None
+        let options = if let Some(selector) = &state.torrent_file_selector {
+            let files = backend.list_files(&source).await?;
+            let file_indices = selector.select(&files).await?;
+            Some(AddTorrentOptions { file_indices })
+        } else {
+            None
+        };
+
+        let torrent = backend.add_torrent(source, options).await?;
+        state
+            .active_torrents
+            .write()
+            .await
+            .insert(resource_id.clone(), torrent.clone());
+        torrent
     };
 
-    let added = backend.add_torrent(source, options).await?;
+    Ok(playlist(&resource_id, torrent))
+}
 
-    {
-        let mut current = state.current_torrent.write().await;
-        *current = Some(added.clone());
-    }
-
+fn playlist(resource_id: &str, torrent: Torrent) -> Response {
     let mut m3u = String::from("#EXTM3U\n");
-    for file in added.files {
-        let url = format!("{}/stream/{}", added.id, file.index);
+    for file in torrent.files {
+        let url = format!("{resource_id}/stream/{}", file.index);
 
         m3u.push_str(&format!("#EXTINF:-1,{}\n{}\n", file.name, url));
     }
 
-    let response = Response::builder()
+    Response::builder()
         .status(StatusCode::OK)
         .header(CONTENT_TYPE, "application/x-mpegurl")
         .body(Body::new(m3u))
-        .unwrap();
-
-    Ok(response)
+        .unwrap()
 }
 
 pub async fn handle_torrent_stream_request(
     State(state): State<Arc<ServerState>>,
-    Path((torrent_id, file_index)): Path<(String, usize)>,
+    Path((resource_id, file_index)): Path<(String, usize)>,
     incoming_request: axum::extract::Request,
 ) -> Result<Response, Error> {
     let backend = state
         .torrent_backend
         .as_ref()
         .ok_or(Error::TorrentSupportDisabled)?;
+
+    let torrent_id = state
+        .active_torrents
+        .read()
+        .await
+        .get(&resource_id)
+        .map(|torrent| torrent.id.clone())
+        .ok_or(Error::NotFound)?;
 
     let (parts, _body) = incoming_request.into_parts();
 

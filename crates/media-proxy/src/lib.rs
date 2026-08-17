@@ -1,11 +1,11 @@
 mod error;
-mod mime;
 pub mod resources;
 mod routes;
 #[cfg(feature = "torrent")]
 pub mod torrent;
 pub mod utils;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::{Router, routing::get};
@@ -15,18 +15,16 @@ use tokio::sync::RwLock;
 #[cfg(feature = "torrent")]
 use crate::torrent::Torrent;
 use crate::{
-    resources::{Resource, ResourceStore, ResourceStoreConfig},
-    routes::{handle_image_request, handle_video_request},
+    resources::{MediaReference, Resource},
+    routes::handle_media_request,
 };
 
 pub type HttpRequest = http::Request<Option<Bytes>>;
 
+#[cfg(feature = "torrent")]
 #[derive(Default)]
-pub struct MediaProxyConfig {
-    pub resource_store: ResourceStoreConfig,
-    #[cfg(feature = "torrent")]
+pub struct TorrentConfig {
     pub torrent_backend: Option<Arc<dyn torrent::TorrentBackend>>,
-    #[cfg(feature = "torrent")]
     pub torrent_file_selector: Option<Arc<dyn torrent::TorrentFileSelector>>,
 }
 
@@ -37,11 +35,10 @@ pub struct ServerState {
     #[cfg(feature = "torrent")]
     torrent_file_selector: Option<Arc<dyn torrent::TorrentFileSelector>>,
 
-    resource_store: ResourceStore,
+    resources: RwLock<HashMap<String, Resource>>,
 
-    current_video: RwLock<Option<Resource>>,
     #[cfg(feature = "torrent")]
-    current_torrent: RwLock<Option<Torrent>>,
+    active_torrents: RwLock<HashMap<String, Torrent>>,
 }
 
 pub struct MediaProxy {
@@ -49,19 +46,11 @@ pub struct MediaProxy {
 }
 
 impl MediaProxy {
-    pub fn new(http_client: reqwest::Client, config: MediaProxyConfig) -> Self {
+    #[cfg(not(feature = "torrent"))]
+    pub fn new(http_client: reqwest::Client) -> Self {
         let state = ServerState {
-            http_client: http_client.clone(),
-
-            #[cfg(feature = "torrent")]
-            torrent_backend: config.torrent_backend,
-            #[cfg(feature = "torrent")]
-            torrent_file_selector: config.torrent_file_selector,
-
-            resource_store: ResourceStore::new(http_client, config.resource_store),
-            current_video: RwLock::new(None),
-            #[cfg(feature = "torrent")]
-            current_torrent: RwLock::new(None),
+            http_client,
+            resources: RwLock::new(HashMap::new()),
         };
 
         Self {
@@ -69,23 +58,67 @@ impl MediaProxy {
         }
     }
 
-    pub fn resource_store(&self) -> &ResourceStore {
-        &self.state.resource_store
+    #[cfg(feature = "torrent")]
+    pub fn new(http_client: reqwest::Client, config: TorrentConfig) -> Self {
+        let state = ServerState {
+            http_client,
+            torrent_backend: config.torrent_backend,
+            torrent_file_selector: config.torrent_file_selector,
+
+            resources: RwLock::new(HashMap::new()),
+            active_torrents: RwLock::new(HashMap::new()),
+        };
+
+        Self {
+            state: Arc::new(state),
+        }
+    }
+
+    pub async fn register(&self, id: impl Into<String>, resource: Resource) -> MediaReference {
+        let id = id.into();
+
+        #[cfg(feature = "torrent")]
+        {
+            self.state.resources.write().await.remove(&id);
+            self.release_torrent(&id).await;
+        }
+
+        self.state
+            .resources
+            .write()
+            .await
+            .insert(id.clone(), resource);
+
+        MediaReference::new(id)
+    }
+
+    pub async fn unregister(&self, id: &str) -> Option<Resource> {
+        let resource = self.state.resources.write().await.remove(id);
+
+        #[cfg(feature = "torrent")]
+        self.release_torrent(id).await;
+
+        resource
+    }
+
+    #[cfg(feature = "torrent")]
+    async fn release_torrent(&self, resource_id: &str) {
+        let torrent = self.state.active_torrents.write().await.remove(resource_id);
+
+        if let (Some(backend), Some(torrent)) = (&self.state.torrent_backend, torrent)
+            && let Err(error) = backend.cancel_torrent(&torrent.id).await
+        {
+            tracing::warn!(%error, %resource_id, "failed to release torrent resource");
+        }
     }
 
     pub fn router(&self) -> Router {
-        let base = Router::new()
-            .route("/image/{resource_id}", get(handle_image_request))
-            .route("/video/{resource_id}", get(handle_video_request));
+        let base = Router::new().route("/media/{resource_id}", get(handle_media_request));
 
         #[cfg(feature = "torrent")]
         let base = if self.state.torrent_backend.is_some() {
             base.route(
-                "/torrent/{resource_id}",
-                get(routes::handle_torrent_request),
-            )
-            .route(
-                "/torrent/{torrent_id}/stream/{file_index}",
+                "/media/{resource_id}/stream/{file_index}",
                 get(routes::handle_torrent_stream_request),
             )
         } else {
