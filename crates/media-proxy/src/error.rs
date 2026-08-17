@@ -12,10 +12,6 @@ pub enum Error {
     Reqwest(#[from] reqwest::Error),
 
     #[cfg(feature = "torrent")]
-    #[error("Torrent support is disabled")]
-    TorrentSupportDisabled,
-
-    #[cfg(feature = "torrent")]
     #[error("Torrent error: {0}")]
     TorrentBackend(#[from] anyhow::Error),
 }
@@ -27,11 +23,6 @@ impl IntoResponse for Error {
             Error::Reqwest(_) => {
                 error!("Reqwest error: {:#}", self);
                 StatusCode::BAD_GATEWAY
-            }
-            #[cfg(feature = "torrent")]
-            Error::TorrentSupportDisabled => {
-                error!("Torrent support is disabled: {:#}", self);
-                StatusCode::BAD_REQUEST
             }
             #[cfg(feature = "torrent")]
             Error::TorrentBackend(e) => {

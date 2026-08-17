@@ -22,16 +22,15 @@ use crate::{
 pub type HttpRequest = http::Request<Option<Bytes>>;
 
 #[cfg(feature = "torrent")]
-#[derive(Default)]
 pub struct TorrentConfig {
-    pub torrent_backend: Option<Arc<dyn torrent::TorrentBackend>>,
+    pub torrent_backend: Arc<dyn torrent::TorrentBackend>,
     pub torrent_file_selector: Option<Arc<dyn torrent::TorrentFileSelector>>,
 }
 
 pub struct ServerState {
     http_client: reqwest::Client,
     #[cfg(feature = "torrent")]
-    torrent_backend: Option<Arc<dyn torrent::TorrentBackend>>,
+    torrent_backend: Arc<dyn torrent::TorrentBackend>,
     #[cfg(feature = "torrent")]
     torrent_file_selector: Option<Arc<dyn torrent::TorrentFileSelector>>,
 
@@ -105,8 +104,8 @@ impl MediaProxy {
     async fn release_torrent(&self, resource_id: &str) {
         let torrent = self.state.active_torrents.write().await.remove(resource_id);
 
-        if let (Some(backend), Some(torrent)) = (&self.state.torrent_backend, torrent)
-            && let Err(error) = backend.cancel_torrent(&torrent.id).await
+        if let Some(torrent) = torrent
+            && let Err(error) = self.state.torrent_backend.cancel_torrent(&torrent.id).await
         {
             tracing::warn!(%error, %resource_id, "failed to release torrent resource");
         }
@@ -116,14 +115,10 @@ impl MediaProxy {
         let base = Router::new().route("/media/{resource_id}", get(handle_media_request));
 
         #[cfg(feature = "torrent")]
-        let base = if self.state.torrent_backend.is_some() {
-            base.route(
-                "/media/{resource_id}/stream/{file_index}",
-                get(routes::handle_torrent_stream_request),
-            )
-        } else {
-            base
-        };
+        let base = base.route(
+            "/media/{resource_id}/stream/{file_index}",
+            get(routes::handle_torrent_stream_request),
+        );
 
         base.with_state(self.state.clone())
     }

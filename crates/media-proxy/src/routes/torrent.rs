@@ -18,10 +18,7 @@ pub(super) async fn handle_torrent_resource(
     resource_id: String,
     source: TorrentSource,
 ) -> Result<Response, Error> {
-    let backend = state
-        .torrent_backend
-        .as_ref()
-        .ok_or(Error::TorrentSupportDisabled)?;
+    let backend = &state.torrent_backend;
 
     let torrent = if let Some(torrent) = state
         .active_torrents
@@ -72,10 +69,7 @@ pub async fn handle_torrent_stream_request(
     Path((resource_id, file_index)): Path<(String, usize)>,
     incoming_request: axum::extract::Request,
 ) -> Result<Response, Error> {
-    let backend = state
-        .torrent_backend
-        .as_ref()
-        .ok_or(Error::TorrentSupportDisabled)?;
+    let backend = &state.torrent_backend;
 
     let torrent_id = state
         .active_torrents
