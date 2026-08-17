@@ -6,7 +6,7 @@ mod routes;
 pub mod torrent;
 pub mod utils;
 
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 
 use axum::{Router, routing::get};
 use bytes::Bytes;
@@ -31,9 +31,6 @@ pub struct MediaProxyConfig {
 }
 
 pub struct ServerState {
-    #[cfg(feature = "torrent")]
-    addr: SocketAddr,
-
     http_client: reqwest::Client,
     #[cfg(feature = "torrent")]
     torrent_backend: Option<Arc<dyn torrent::TorrentBackend>>,
@@ -52,10 +49,8 @@ pub struct MediaProxy {
 }
 
 impl MediaProxy {
-    pub fn new(addr: SocketAddr, http_client: reqwest::Client, config: MediaProxyConfig) -> Self {
+    pub fn new(http_client: reqwest::Client, config: MediaProxyConfig) -> Self {
         let state = ServerState {
-            #[cfg(feature = "torrent")]
-            addr,
             http_client: http_client.clone(),
 
             #[cfg(feature = "torrent")]
@@ -63,7 +58,7 @@ impl MediaProxy {
             #[cfg(feature = "torrent")]
             torrent_file_selector: config.torrent_file_selector,
 
-            resource_store: ResourceStore::new(addr, http_client, config.resource_store),
+            resource_store: ResourceStore::new(http_client, config.resource_store),
             current_video: RwLock::new(None),
             #[cfg(feature = "torrent")]
             current_torrent: RwLock::new(None),

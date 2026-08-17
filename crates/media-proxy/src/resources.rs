@@ -1,18 +1,49 @@
 use std::{
     collections::HashMap,
-    net::SocketAddr,
     sync::Arc,
     time::{Duration, Instant},
 };
 
 use anyhow::bail;
-use http::uri::Scheme;
+use serde::{Deserialize, Serialize};
 use tokio::{sync::RwLock, time};
 use url::Url;
 
 use crate::HttpRequest;
 #[cfg(feature = "torrent")]
 use crate::torrent::TorrentSource;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ResourceKind {
+    Image,
+    Video,
+    Torrent,
+}
+
+impl ResourceKind {
+    fn route(self) -> &'static str {
+        match self {
+            Self::Image => "image",
+            Self::Video => "video",
+            Self::Torrent => "torrent",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum MediaReference {
+    Direct { url: Url },
+    Proxied { kind: ResourceKind, id: String },
+}
+
+impl MediaReference {
+    pub fn resolve(&self, proxy_base: &Url) -> Result<Url, url::ParseError> {
+        match self {
+            Self::Direct { url } => Ok(url.clone()),
+            Self::Proxied { kind, id } => proxy_base.join(&format!("{}/{id}", kind.route())),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum Resource {
@@ -49,7 +80,6 @@ pub struct ResourceStoreConfig {
 }
 
 pub struct ResourceStore {
-    addr: SocketAddr,
     http_client: reqwest::Client,
     entries: Arc<RwLock<HashMap<String, Entry>>>,
     ttl: Option<Duration>,
@@ -57,13 +87,8 @@ pub struct ResourceStore {
 }
 
 impl ResourceStore {
-    pub(crate) fn new(
-        addr: SocketAddr,
-        http_client: reqwest::Client,
-        config: ResourceStoreConfig,
-    ) -> Self {
+    pub(crate) fn new(http_client: reqwest::Client, config: ResourceStoreConfig) -> Self {
         let store = Self {
-            addr,
             http_client,
             entries: Arc::new(RwLock::new(HashMap::new())),
             ttl: config.ttl,
@@ -100,9 +125,15 @@ impl ResourceStore {
         Ok(())
     }
 
-    async fn insert_http(&self, id: String, req: Box<HttpRequest>) -> anyhow::Result<Url> {
+    async fn insert_http(
+        &self,
+        id: String,
+        req: Box<HttpRequest>,
+    ) -> anyhow::Result<MediaReference> {
         if req.headers().is_empty() && req.body().is_none() {
-            return Ok(Url::parse(&req.uri().to_string())?);
+            return Ok(MediaReference::Direct {
+                url: req.uri().to_string().parse()?,
+            });
         }
 
         let mime_type = crate::mime::mime_type(&self.http_client, &req)
@@ -114,31 +145,34 @@ impl ResourceStore {
             && mime_type.subtype() == "application/x-bittorrent"
         {
             let resource = Resource::Torrent(TorrentSource::Http(req));
-            let url = Url::parse(&format!("{}://{}/torrent/{}", Scheme::HTTP, self.addr, id))?;
-            self.save(id, resource).await?;
-            return Ok(url);
+            self.save(id.clone(), resource).await?;
+            return Ok(MediaReference::Proxied {
+                kind: ResourceKind::Torrent,
+                id,
+            });
         }
 
-        let path = match mime_type.type_() {
-            mime::IMAGE => "image",
-            mime::VIDEO => "video",
+        let kind = match mime_type.type_() {
+            mime::IMAGE => ResourceKind::Image,
+            mime::VIDEO => ResourceKind::Video,
             _ => bail!("Unsupported media type"),
         };
 
-        let url = Url::parse(&format!("{}://{}/{}/{}", Scheme::HTTP, self.addr, path, id))?;
-        self.save(id, Resource::Http(req)).await?;
+        self.save(id.clone(), Resource::Http(req)).await?;
 
-        Ok(url)
+        Ok(MediaReference::Proxied { kind, id })
     }
 
-    pub async fn insert(&self, id: String, resource: Resource) -> anyhow::Result<Url> {
+    pub async fn insert(&self, id: String, resource: Resource) -> anyhow::Result<MediaReference> {
         match resource {
             Resource::Http(req) => self.insert_http(id, req).await,
             #[cfg(feature = "torrent")]
             Resource::Torrent(src) => {
-                let url = Url::parse(&format!("{}://{}/torrent/{}", Scheme::HTTP, self.addr, id))?;
-                self.save(id, Resource::Torrent(src)).await?;
-                Ok(url)
+                self.save(id.clone(), Resource::Torrent(src)).await?;
+                Ok(MediaReference::Proxied {
+                    kind: ResourceKind::Torrent,
+                    id,
+                })
             }
         }
     }

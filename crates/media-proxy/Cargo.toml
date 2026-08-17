@@ -19,7 +19,7 @@ thiserror = "2.0.17"
 tokio = { workspace = true, features = ["net"] }
 tokio-util = { version = "0.7.18", optional = true }
 tracing = { workspace = true }
-url = { workspace = true }
+url = { workspace = true, features = ["serde"] }
 
 [features]
 torrent = ["dep:async-trait"]

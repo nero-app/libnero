@@ -1,8 +1,10 @@
 use anyhow::bail;
 use nero_extensions::types::MediaResource;
-use nero_media_proxy::{MediaProxy, resources::Resource};
+use nero_media_proxy::{
+    MediaProxy,
+    resources::{MediaReference, Resource},
+};
 use serde::{Deserialize, Serialize};
-use url::Url;
 use uuid::Uuid;
 
 use crate::utils::AsyncTryFromWithProxy;
@@ -41,7 +43,7 @@ pub type EpisodesPage = Page<Episode>;
 pub struct Series {
     pub id: String,
     pub title: String,
-    pub poster_url: Option<Url>,
+    pub poster_url: Option<MediaReference>,
     pub synopsis: Option<String>,
     pub r#type: Option<String>,
 }
@@ -77,7 +79,7 @@ pub struct Episode {
     pub id: String,
     pub number: u16,
     pub title: Option<String>,
-    pub thumbnail_url: Option<Url>,
+    pub thumbnail_url: Option<MediaReference>,
     pub description: Option<String>,
 }
 
@@ -110,7 +112,7 @@ type Resolution = (u16, u16);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Video {
-    pub url: Url,
+    pub url: MediaReference,
     pub server: String,
     pub resolution: Resolution,
 }

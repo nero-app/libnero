@@ -5,7 +5,7 @@ use axum::{
     extract::{Path, State},
     response::Response,
 };
-use http::{Request, StatusCode, header::CONTENT_TYPE, uri::Scheme};
+use http::{Request, StatusCode, header::CONTENT_TYPE};
 
 use crate::{ServerState, error::Error, resources::Resource, torrent::AddTorrentOptions};
 
@@ -53,13 +53,7 @@ pub async fn handle_torrent_request(
 
     let mut m3u = String::from("#EXTM3U\n");
     for file in added.files {
-        let url = format!(
-            "{}://{}/torrent/{}/stream/{}",
-            Scheme::HTTP,
-            state.addr,
-            added.id,
-            file.index
-        );
+        let url = format!("{}/stream/{}", added.id, file.index);
 
         m3u.push_str(&format!("#EXTINF:-1,{}\n{}\n", file.name, url));
     }

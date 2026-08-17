@@ -7,7 +7,6 @@ edition = "2024"
 anyhow = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true, features = ["fs"] }
-url = { workspace = true, features = ["serde"] }
 nero-media-proxy = { path = "../media-proxy" }
 nero-extensions = { path = "../extensions" }
 wasm-metadata = { workspace = true }
