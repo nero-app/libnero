@@ -20,7 +20,7 @@ pub async fn handle_video_request(
 ) -> Result<Response, Error> {
     let resource = state
         .resource_store
-        .remove(&resource_id)
+        .get(&resource_id)
         .await
         .ok_or(Error::NotFound)?;
 

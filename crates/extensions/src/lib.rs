@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 pub use extension::WasmExtension;
 pub use host::WasmHost;
+pub use wasm_metadata::Metadata;
 
 pub use nero_keyvalue_ttl::{Bucket, Error as StoreError, KeyResponse, Store};
 pub use nero_portal::{
@@ -15,7 +16,6 @@ pub use nero_portal::{
 };
 
 use anyhow::Result;
-use wasm_metadata::Metadata;
 
 use crate::{
     types::{EpisodesPage, FilterCategory, SearchFilter, Series, SeriesPage, Video},

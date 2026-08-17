@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use wasm_metadata::Payload;
+use wasm_metadata::{Metadata, Payload};
 use wasmtime::{Engine, component::Component};
 
 use std::sync::Arc;
@@ -28,6 +28,15 @@ impl Default for WasmHost {
 }
 
 impl WasmHost {
+    pub async fn inspect(path: impl AsRef<Path>) -> anyhow::Result<Metadata> {
+        let bytes = tokio::fs::read(path).await?;
+
+        match Payload::from_binary(&bytes)? {
+            Payload::Component { metadata, .. } => Ok(metadata),
+            Payload::Module(_) => anyhow::bail!("unsupported wasm module"),
+        }
+    }
+
     pub async fn load_extension_async<P: AsRef<Path>>(
         &self,
         path: P,
