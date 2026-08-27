@@ -1,5 +1,29 @@
 interface types {
-    use wasi:http/types@0.2.7.{outgoing-request};
+    use wasi:http/types@0.2.7.{outgoing-request, error-code};
+
+    /// The set of errors that may be raised by extension interfaces.
+    variant error {
+        /// A resource required to complete the operation does not exist.
+        not-found,
+
+        /// The caller has not established the authority required to perform
+        /// the operation.
+        unauthorized,
+
+        /// The caller is recognized but is not allowed to perform the
+        /// operation or access the requested resource.
+        forbidden,
+
+        /// A transport or protocol-level failure occurred while making an HTTP
+        /// request. Receiving an HTTP response with an unsuccessful status is
+        /// not, by itself, an instance of this case.
+        http(error-code),
+
+        /// Some implementation-specific error has occurred. The payload is
+        /// intended for diagnostics; its contents are unspecified and callers
+        /// must not depend on them.
+        other(option<string>),
+    }
 
     /// Represents a media resource that can be retrieved through different protocols.
     ///

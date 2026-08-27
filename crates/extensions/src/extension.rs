@@ -10,8 +10,11 @@ use wasmtime_wasi::{ResourceTable, WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
 
 use crate::{
-    Extension,
-    types::{EpisodesPage, FilterCategory, SearchFilter, Series, SeriesPage, Video},
+    Extension, Tracker,
+    types::{
+        EntriesPage, Entry, EntryDetails, EpisodesPage, FilterCategory, SearchFilter, Series,
+        SeriesPage, Video, WatchStatus,
+    },
     wit::{ExtensionPre, since_v0_1_0_draft},
 };
 
@@ -73,6 +76,7 @@ pub struct WasmExtension {
     extension_pre: ExtensionPre,
     metadata: Arc<Metadata>,
     extension_ctx: Arc<ExtensionCtx>,
+    supports_tracker: bool,
 }
 
 impl WasmExtension {
@@ -96,6 +100,8 @@ impl WasmExtension {
             _ => Err(anyhow!("unsupported extension version")),
         }?;
 
+        let supports_tracker = extension_pre.supports_tracker();
+
         Ok(Self {
             extension_pre,
             metadata: Arc::new(metadata),
@@ -103,6 +109,7 @@ impl WasmExtension {
                 keyvalue: KeyValueTTLCtx::new(keyvalue),
                 portal: PortalCtx::new(interaction, opener, callbacks),
             }),
+            supports_tracker,
         })
     }
 
@@ -125,6 +132,10 @@ impl WasmExtension {
         anyhow::bail!(
             "wasm does not contain a '{PACKAGE_NAMESPACE}:{PACKAGE_NAME}' package with a version"
         )
+    }
+
+    pub fn supports_tracker(&self) -> bool {
+        self.supports_tracker
     }
 }
 
@@ -192,5 +203,50 @@ impl Extension for WasmExtension {
         extension
             .get_series_videos(store, series_id, episode_id)
             .await
+    }
+}
+
+impl Tracker for WasmExtension {
+    async fn list_entries(&self, status: WatchStatus, cursor: Option<&str>) -> Result<EntriesPage> {
+        let mut store = Store::new(
+            self.extension_pre.engine(),
+            WasmState::new(self.extension_ctx.clone()),
+        );
+        let extension = self.extension_pre.instantiate_async(&mut store).await?;
+        extension.list_entries(store, status, cursor).await
+    }
+
+    async fn get_entry(&self, series_id: &str) -> Result<Option<Entry>> {
+        let mut store = Store::new(
+            self.extension_pre.engine(),
+            WasmState::new(self.extension_ctx.clone()),
+        );
+        let extension = self.extension_pre.instantiate_async(&mut store).await?;
+        extension.get_entry(store, series_id).await
+    }
+
+    async fn save_entry(
+        &self,
+        series_id: &str,
+        status: WatchStatus,
+        details: EntryDetails,
+    ) -> Result<Entry> {
+        let mut store = Store::new(
+            self.extension_pre.engine(),
+            WasmState::new(self.extension_ctx.clone()),
+        );
+        let extension = self.extension_pre.instantiate_async(&mut store).await?;
+        extension
+            .save_entry(store, series_id, status, details)
+            .await
+    }
+
+    async fn remove_entry(&self, series_id: &str) -> Result<()> {
+        let mut store = Store::new(
+            self.extension_pre.engine(),
+            WasmState::new(self.extension_ctx.clone()),
+        );
+        let extension = self.extension_pre.instantiate_async(&mut store).await?;
+        extension.remove_entry(store, series_id).await
     }
 }

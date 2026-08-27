@@ -1,0 +1,135 @@
+/// The `tracker` interface stores viewing state for series.
+///
+/// Entries are grouped into a fixed set of states rather than custom lists. An
+/// entry wraps a `series` with the viewing progress and other
+/// tracking information associated with it.
+///
+/// Series identifiers are in the identifier space of the implementation. They
+/// are opaque to callers and must be passed back unchanged. The implementation
+/// is responsible for resolving an identifier to the corresponding series.
+interface tracker {
+    use types.{series, error};
+
+    /// The viewing state of a tracked series.
+    enum watch-status {
+        /// The series is currently being watched, including a repeat viewing.
+        watching,
+
+        /// The series has been watched to completion and is not currently
+        /// being watched again.
+        completed,
+
+        /// Watching has been paused with the intention of resuming later.
+        on-hold,
+
+        /// Watching has stopped with no present intention of resuming.
+        dropped,
+
+        /// Watching has not started and is intended for the future.
+        plan-to-watch,
+    }
+
+    /// Additional information recorded for a tracked series.
+    record entry-details {
+        /// The number of installments watched in the current viewing, such as
+        /// the number of episodes watched.
+        ///
+        /// This is a count and not the identifier of a particular installment.
+        /// It may be zero.
+        progress: u32,
+
+        /// A normalized score from 1 to 100, or `none` when the series has not
+        /// been scored.
+        score: option<u8>,
+
+        /// The number of additional times the series has been completed after
+        /// its first completion.
+        ///
+        /// For example, a series watched once has a repeat count of zero. A
+        /// repeat viewing in progress has `watch-status::watching` and retains
+        /// the number of repeat viewings already completed.
+        repeat-count: u32,
+
+        /// Free-form notes associated with the entry, or `none` when no notes
+        /// are recorded.
+        notes: option<string>,
+    }
+
+    /// A tracked series together with its stored tracking information.
+    record entry {
+        /// The series being tracked.
+        series: series,
+
+        /// The viewing state of the series.
+        status: watch-status,
+
+        /// The additional details associated with the series.
+        details: entry-details,
+    }
+
+    /// One page of tracked entries.
+    record entries-page {
+        /// The entries in this page. Their order is implementation-defined.
+        entries: list<entry>,
+
+        /// The continuation token to use to fetch the next page. If this is
+        /// `none`, there are no more entries to fetch.
+        ///
+        /// The token is opaque and is valid only for a subsequent
+        /// `list-entries` call with the same `status`.
+        cursor: option<string>,
+    }
+
+    /// Returns one page of entries having the given viewing state.
+    ///
+    /// * `status`: The viewing state by which to select entries.
+    /// * `cursor`: `none` to begin listing, or a cursor returned by the
+    ///   preceding call for the same `status`.
+    ///
+    /// An empty tracker, or a state containing no entries, returns an empty
+    /// page with no cursor.
+    list-entries: func(status: watch-status, cursor: option<string>) -> result<entries-page, error>;
+
+    /// Returns the tracked entry for a series.
+    ///
+    /// * `series-id`: The opaque identifier of the series to look up.
+    ///
+    /// Returns the tracked entry associated with the series, or `none` if the
+    /// series is recognized but has no tracked entry.
+    ///
+    /// Fails with `error::not-found` if the series identifier is not
+    /// recognized.
+    get-entry: func(series-id: string) -> result<option<entry>, error>;
+
+    /// Creates or replaces the tracked entry for a series.
+    ///
+    /// * `series-id`: The opaque identifier of the series to track.
+    /// * `status`: The viewing state to store.
+    /// * `details`: The complete additional details to store. Setting an
+    ///   optional field to `none` clears the value that was previously stored.
+    ///
+    /// If no entry exists, one is created. Otherwise its state is replaced.
+    /// The returned entry contains the values actually stored after any
+    /// normalization performed by the implementation.
+    ///
+    /// The implementation resolves `series-id` itself and returns the
+    /// corresponding canonical series in the resulting entry.
+    ///
+    /// Fails with `error::not-found` if the identifier is not recognized.
+    save-entry: func(
+        series-id: string,
+        status: watch-status,
+        details: entry-details,
+    ) -> result<entry, error>;
+
+    /// Removes the tracked entry for a series.
+    ///
+    /// * `series-id`: The opaque identifier of the series to stop tracking.
+    ///
+    /// If the series is recognized but has no tracked entry, this succeeds
+    /// without changing anything.
+    ///
+    /// Fails with `error::not-found` if the series identifier is not
+    /// recognized.
+    remove-entry: func(series-id: string) -> result<_, error>;
+}

@@ -5,12 +5,12 @@
 /// local or file system data extraction.
 interface extractor {
     use types.{
-        filter-category, search-filter, series-page, series, episodes-page, video,
+        filter-category, search-filter, series-page,
+        series, episodes-page, video, error
     };
-    use wasi:http/types@0.2.7.{error-code};
 
     /// Returns a list of available filters to use in the `search` method.
-    filters: func() -> result<list<filter-category>, error-code>;
+    filters: func() -> result<list<filter-category>, error>;
 
     /// Searches for series based on a query string, optional pagination, and a list of filters.
     ///
@@ -18,39 +18,42 @@ interface extractor {
     /// * `page`: Optional page number for paginated results.
     /// * `filters`: List of filters to apply to the search.
     ///
-    /// Returns a `series-page` if successful, or an http error code as a `error-code`.
+    /// Returns a `series-page` if successful, or an `error` describing why the
+    /// search could not be completed.
     search: func(
         query: string,
         page: option<u16>,
         filters: list<search-filter>
-    ) -> result<series-page, error-code>;
+    ) -> result<series-page, error>;
 
     /// Retrieves information about a specific series, identified by its unique `series-id`.
     ///
     /// * `series-id`: The unique identifier for the series to retrieve information about.
     ///
-    /// Returns a `series` record if successful, or an http error code as a `error-code`.
-    get-series-info: func(series-id: string) -> result<series, error-code>;
+    /// Fails with `error::not-found` if the identifier is not recognized.
+    get-series-info: func(series-id: string) -> result<series, error>;
 
     /// Retrieves a paginated list of episodes for a given series, identified by its unique `series-id`.
     ///
     /// * `series-id`: The unique identifier for the series from which episodes are to be fetched.
     /// * `page`: Optional page number for paginated results.
     ///
-    /// Returns an `episodes-page` if successful, or an http error code as a `error-code`.
+    /// Fails with `error::not-found` if the series identifier is not
+    /// recognized.
     get-series-episodes: func(
         series-id: string,
         page: option<u16>
-    ) -> result<episodes-page, error-code>;
+    ) -> result<episodes-page, error>;
 
     /// Retrieves the available video streams for a given episode of a specific series.
     ///
     /// * `series-id`: The unique identifier for the series to which the episode belongs.
     /// * `episode-id`: The unique identifier of the episode for which video streams are requested.
     ///
-    /// Returns a list of `video` records if successful, or an http error code as a `error-code`.
+    /// Fails with `error::not-found` if the series or episode identifier is
+    /// not recognized.
     get-series-videos: func(
         series-id: string,
         episode-id: string
-    ) -> result<list<video>, error-code>;
+    ) -> result<list<video>, error>;
 }

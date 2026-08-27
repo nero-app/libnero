@@ -8,7 +8,10 @@ use wasmtime_wasi_http::{
 
 use crate::{
     extension::WasmState,
-    types::{EpisodesPage, FilterCategory, HttpRequest, SearchFilter, Series, SeriesPage, Video},
+    types::{
+        EntriesPage, Entry, EntryDetails, EpisodesPage, FilterCategory, HttpRequest, SearchFilter,
+        Series, SeriesPage, Video, WatchStatus,
+    },
 };
 
 pub mod since_v0_1_0_draft;
@@ -96,8 +99,22 @@ impl ExtensionPre {
     pub async fn instantiate_async(&self, store: &mut Store<WasmState>) -> Result<Extension> {
         match self {
             ExtensionPre::V0_1_0_DRAFT(pre) => {
-                let extension = pre.instantiate_async(store).await?;
-                Ok(Extension::V0_1_0_DRAFT(extension))
+                let instance = pre.instance_pre().instantiate_async(&mut *store).await?;
+                let extension = since_v0_1_0_draft::ExtensionIndices::new(pre.instance_pre())?
+                    .load(&mut *store, &instance)?;
+                let tracker = since_v0_1_0_draft::TrackerIndices::new(pre.instance_pre())
+                    .ok()
+                    .map(|indices| indices.load(&mut *store, &instance))
+                    .transpose()?;
+                Ok(Extension::V0_1_0_DRAFT(extension, tracker))
+            }
+        }
+    }
+
+    pub fn supports_tracker(&self) -> bool {
+        match self {
+            ExtensionPre::V0_1_0_DRAFT(pre) => {
+                since_v0_1_0_draft::TrackerIndices::new(pre.instance_pre()).is_ok()
             }
         }
     }
@@ -105,7 +122,10 @@ impl ExtensionPre {
 
 #[allow(non_camel_case_types)]
 pub enum Extension {
-    V0_1_0_DRAFT(since_v0_1_0_draft::Extension),
+    V0_1_0_DRAFT(
+        since_v0_1_0_draft::Extension,
+        Option<since_v0_1_0_draft::Tracker>,
+    ),
 }
 
 impl Extension {
@@ -114,7 +134,7 @@ impl Extension {
         mut store: wasmtime::Store<WasmState>,
     ) -> Result<Vec<FilterCategory>> {
         match self {
-            Extension::V0_1_0_DRAFT(extension) => {
+            Extension::V0_1_0_DRAFT(extension, _) => {
                 let res = extension
                     .nero_extension_extractor()
                     .call_filters(&mut store)
@@ -134,7 +154,7 @@ impl Extension {
         filters: Vec<SearchFilter>,
     ) -> Result<SeriesPage> {
         match self {
-            Extension::V0_1_0_DRAFT(extension) => {
+            Extension::V0_1_0_DRAFT(extension, _) => {
                 let filters = filters.into_iter().map(Into::into).collect::<Vec<_>>();
 
                 let res = extension
@@ -154,7 +174,7 @@ impl Extension {
         series_id: &str,
     ) -> Result<Series> {
         match self {
-            Extension::V0_1_0_DRAFT(extension) => {
+            Extension::V0_1_0_DRAFT(extension, _) => {
                 let res = extension
                     .nero_extension_extractor()
                     .call_get_series_info(&mut store, series_id)
@@ -173,7 +193,7 @@ impl Extension {
         page: Option<u16>,
     ) -> Result<EpisodesPage> {
         match self {
-            Extension::V0_1_0_DRAFT(extension) => {
+            Extension::V0_1_0_DRAFT(extension, _) => {
                 let res = extension
                     .nero_extension_extractor()
                     .call_get_series_episodes(&mut store, series_id, page)
@@ -192,7 +212,7 @@ impl Extension {
         episode_id: &str,
     ) -> Result<Vec<Video>> {
         match self {
-            Extension::V0_1_0_DRAFT(extension) => {
+            Extension::V0_1_0_DRAFT(extension, _) => {
                 let res = extension
                     .nero_extension_extractor()
                     .call_get_series_videos(&mut store, series_id, episode_id)
@@ -205,6 +225,77 @@ impl Extension {
                 }
                 Ok(items)
             }
+        }
+    }
+
+    pub async fn list_entries(
+        &self,
+        mut store: wasmtime::Store<WasmState>,
+        status: WatchStatus,
+        cursor: Option<&str>,
+    ) -> Result<EntriesPage> {
+        match self {
+            Extension::V0_1_0_DRAFT(_, Some(tracker)) => {
+                let result = tracker
+                    .call_list_entries(&mut store, status.into(), cursor)
+                    .await?
+                    .map_err(|error| anyhow!("{error}"))?;
+                result.try_into_with_store(&mut store).await
+            }
+            Extension::V0_1_0_DRAFT(_, None) => anyhow::bail!("extension does not export tracker"),
+        }
+    }
+
+    pub async fn get_entry(
+        &self,
+        mut store: wasmtime::Store<WasmState>,
+        series_id: &str,
+    ) -> Result<Option<Entry>> {
+        match self {
+            Extension::V0_1_0_DRAFT(_, Some(tracker)) => {
+                let result = tracker
+                    .call_get_entry(&mut store, series_id)
+                    .await?
+                    .map_err(|error| anyhow!("{error}"))?;
+                match result {
+                    Some(entry) => Ok(Some(entry.try_into_with_store(&mut store).await?)),
+                    None => Ok(None),
+                }
+            }
+            Extension::V0_1_0_DRAFT(_, None) => anyhow::bail!("extension does not export tracker"),
+        }
+    }
+
+    pub async fn save_entry(
+        &self,
+        mut store: wasmtime::Store<WasmState>,
+        series_id: &str,
+        status: WatchStatus,
+        details: EntryDetails,
+    ) -> Result<Entry> {
+        match self {
+            Extension::V0_1_0_DRAFT(_, Some(tracker)) => {
+                let result = tracker
+                    .call_save_entry(&mut store, series_id, status.into(), &details.into())
+                    .await?
+                    .map_err(|error| anyhow!("{error}"))?;
+                result.try_into_with_store(&mut store).await
+            }
+            Extension::V0_1_0_DRAFT(_, None) => anyhow::bail!("extension does not export tracker"),
+        }
+    }
+
+    pub async fn remove_entry(
+        &self,
+        mut store: wasmtime::Store<WasmState>,
+        series_id: &str,
+    ) -> Result<()> {
+        match self {
+            Extension::V0_1_0_DRAFT(_, Some(tracker)) => tracker
+                .call_remove_entry(&mut store, series_id)
+                .await?
+                .map_err(|error| anyhow!("{error}")),
+            Extension::V0_1_0_DRAFT(_, None) => anyhow::bail!("extension does not export tracker"),
         }
     }
 }

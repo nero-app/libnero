@@ -18,7 +18,10 @@ pub use nero_portal::{
 use anyhow::Result;
 
 use crate::{
-    types::{EpisodesPage, FilterCategory, SearchFilter, Series, SeriesPage, Video},
+    types::{
+        EntriesPage, Entry, EntryDetails, EpisodesPage, FilterCategory, SearchFilter, Series,
+        SeriesPage, Video, WatchStatus,
+    },
     wit::AsyncTryIntoWithStore,
 };
 
@@ -48,4 +51,26 @@ pub trait Extension {
         series_id: &str,
         episode_id: &str,
     ) -> impl std::future::Future<Output = Result<Vec<Video>>>;
+}
+
+pub trait Tracker {
+    fn list_entries(
+        &self,
+        status: WatchStatus,
+        cursor: Option<&str>,
+    ) -> impl std::future::Future<Output = Result<EntriesPage>>;
+
+    fn get_entry(
+        &self,
+        series_id: &str,
+    ) -> impl std::future::Future<Output = Result<Option<Entry>>>;
+
+    fn save_entry(
+        &self,
+        series_id: &str,
+        status: WatchStatus,
+        details: EntryDetails,
+    ) -> impl std::future::Future<Output = Result<Entry>>;
+
+    fn remove_entry(&self, series_id: &str) -> impl std::future::Future<Output = Result<()>>;
 }

@@ -22,6 +22,11 @@ use crate::{
     },
 };
 
+use tracker::exports::nero::extension::tracker::{EntriesPage, Entry, EntryDetails, WatchStatus};
+
+pub(super) type Tracker = tracker::exports::nero::extension::tracker::Guest;
+pub(super) type TrackerIndices = tracker::exports::nero::extension::tracker::GuestIndices;
+
 pub static MIN_VER: LazyLock<Version> =
     LazyLock::new(|| Version::parse("0.1.0-draft").expect("invalid version"));
 
@@ -37,6 +42,19 @@ bindgen!({
         "nero:portal": nero_portal::portal,
     },
 });
+
+mod tracker {
+    use wasmtime::component::bindgen;
+
+    bindgen!({
+        path: "./wit/v0.1.0-draft",
+        interfaces: "export nero:extension/tracker@0.1.0-draft;",
+        exports: { default: async },
+        with: {
+            "nero:extension/types@0.1.0-draft": super::nero::extension::types,
+        },
+    });
+}
 
 pub fn linker(engine: &Engine) -> Result<Linker<WasmState>> {
     let mut linker = Linker::<WasmState>::new(engine);
@@ -190,5 +208,80 @@ impl AsyncTryFromWithStore<MediaResource> for crate::types::MediaResource {
                 Ok(crate::types::MediaResource::MagnetUri(uri))
             }
         }
+    }
+}
+
+impl From<crate::types::WatchStatus> for WatchStatus {
+    fn from(status: crate::types::WatchStatus) -> Self {
+        match status {
+            crate::types::WatchStatus::Watching => Self::Watching,
+            crate::types::WatchStatus::Completed => Self::Completed,
+            crate::types::WatchStatus::OnHold => Self::OnHold,
+            crate::types::WatchStatus::Dropped => Self::Dropped,
+            crate::types::WatchStatus::PlanToWatch => Self::PlanToWatch,
+        }
+    }
+}
+
+impl From<WatchStatus> for crate::types::WatchStatus {
+    fn from(status: WatchStatus) -> Self {
+        match status {
+            WatchStatus::Watching => Self::Watching,
+            WatchStatus::Completed => Self::Completed,
+            WatchStatus::OnHold => Self::OnHold,
+            WatchStatus::Dropped => Self::Dropped,
+            WatchStatus::PlanToWatch => Self::PlanToWatch,
+        }
+    }
+}
+
+impl From<crate::types::EntryDetails> for EntryDetails {
+    fn from(details: crate::types::EntryDetails) -> Self {
+        Self {
+            progress: details.progress,
+            score: details.score,
+            repeat_count: details.repeat_count,
+            notes: details.notes,
+        }
+    }
+}
+
+impl From<EntryDetails> for crate::types::EntryDetails {
+    fn from(details: EntryDetails) -> Self {
+        Self {
+            progress: details.progress,
+            score: details.score,
+            repeat_count: details.repeat_count,
+            notes: details.notes,
+        }
+    }
+}
+
+impl AsyncTryFromWithStore<Entry> for crate::types::Entry {
+    async fn try_from_with_store(
+        entry: Entry,
+        store: &mut wasmtime::Store<WasmState>,
+    ) -> anyhow::Result<Self> {
+        Ok(Self {
+            series: entry.series.try_into_with_store(store).await?,
+            status: entry.status.into(),
+            details: entry.details.into(),
+        })
+    }
+}
+
+impl AsyncTryFromWithStore<EntriesPage> for crate::types::EntriesPage {
+    async fn try_from_with_store(
+        page: EntriesPage,
+        store: &mut wasmtime::Store<WasmState>,
+    ) -> anyhow::Result<Self> {
+        let mut items = Vec::with_capacity(page.entries.len());
+        for entry in page.entries {
+            items.push(entry.try_into_with_store(store).await?);
+        }
+        Ok(Self {
+            items,
+            cursor: page.cursor,
+        })
     }
 }

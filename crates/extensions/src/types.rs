@@ -17,6 +17,36 @@ pub struct Page<T> {
 pub type SeriesPage = Page<Series>;
 pub type EpisodesPage = Page<Episode>;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WatchStatus {
+    Watching,
+    Completed,
+    OnHold,
+    Dropped,
+    PlanToWatch,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct EntryDetails {
+    pub progress: u32,
+    pub score: Option<u8>,
+    pub repeat_count: u32,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Entry {
+    pub series: Series,
+    pub status: WatchStatus,
+    pub details: EntryDetails,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct EntriesPage {
+    pub items: Vec<Entry>,
+    pub cursor: Option<String>,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Series {
     pub id: String,

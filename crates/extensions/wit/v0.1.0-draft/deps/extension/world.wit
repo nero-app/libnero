@@ -1,17 +1,16 @@
 package nero:extension@0.1.0-draft;
 
-world extension {
+world imports {
     import wasi:http/outgoing-handler@0.2.7;
     import wasi:logging/logging@0.1.0-draft;
     @unstable(feature = extension-keyvalue-ttl)
-    import nero:keyvalue-ttl/store@0.1.0-draft;
+    include nero:keyvalue-ttl/imports@0.1.0-draft;
 
     @unstable(feature = extension-portal)
-    import nero:portal/interaction@0.1.0-draft;
-    @unstable(feature = extension-portal)
-    import nero:portal/opener@0.1.0-draft;
-    @unstable(feature = extension-portal)
-    import nero:portal/callback@0.1.0-draft;
+    include nero:portal/imports@0.1.0-draft;
+}
 
+world extension {
+    include imports;
     export extractor;
 }

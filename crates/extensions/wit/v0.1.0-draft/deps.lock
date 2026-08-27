@@ -7,10 +7,10 @@ sha256 = "d0a8d048c41b566b978cd8ecd03fa51ec1f65af4c26be2f0fc9cfdd7dd6f34f3"
 sha512 = "8d1c9ddaaea70ae54376bfc02dcdd0437336fb4fc67f89763ce09540caefe84cbae89a8de3605aa7613c49188636e925047bcd150c2c60685850095fefb68b73"
 
 [extension]
-url = "https://github.com/dacchidocchi/nero-extension/archive/main.tar.gz"
+url = "https://github.com/nero-app/nero-extension/archive/main.tar.gz"
 prefix = "nero-extension-main/definitions/extension"
-sha256 = "25faaa15fdaab12d4ecd2a64866b1399569f2ceb41d4c7be740ab247a4ed3715"
-sha512 = "3a48102d5b560a6cf172dfee62c9012fc81a49c1aeb7bb2662a30b2279e1fc946defa53e7b15a72b7e00599f96ade261392b4efa3e99d389ffe59f427b6a651a"
+sha256 = "fd113fdadb1487f2397742862b0ae8378795af15459b904e474b876cda853637"
+sha512 = "43890086f80ea5b71d491e5e5dbc608c4f7361372f2b2f893bbb8d956cb814fcf1e1ea27e9b180478b1e6b29588c6911a32b075f421ff623f01ab68faad3f64e"
 deps = ["cli", "clocks", "filesystem", "http", "io", "keyvalue-ttl", "logging", "portal", "random", "sockets"]
 
 [filesystem]
