@@ -45,7 +45,7 @@ pub trait Interaction: Send + Sync {
         title: String,
         cancellable: bool,
         cancel: Cancel,
-    ) -> Box<dyn ProgressHandle>;
+    ) -> Option<Box<dyn ProgressHandle>>;
 }
 
 pub trait ProgressHandle: Send + Sync {
@@ -219,10 +219,13 @@ impl portal::interaction::Host for Portal<'_> {
 impl portal::interaction::HostProgress for Portal<'_> {
     async fn new(&mut self, title: String, cancellable: bool) -> Result<Resource<Progress>> {
         let cancel = Arc::new(CancelState::default());
-        let handle =
+        let Some(handle) =
             self.ctx
                 .interaction
-                .begin_progress(title, cancellable, Cancel(Arc::clone(&cancel)));
+                .begin_progress(title, cancellable, Cancel(Arc::clone(&cancel)))
+        else {
+            anyhow::bail!("progress request was rejected by the host");
+        };
 
         Ok(self.table.push(Progress { handle, cancel })?)
     }
