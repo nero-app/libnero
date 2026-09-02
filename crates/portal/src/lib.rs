@@ -198,6 +198,10 @@ impl portal::interaction::Host for Portal<'_> {
     }
 
     async fn request_selection(&mut self, request: SelectionRequest) -> Result<Option<Vec<u32>>> {
+        if request.choices.is_empty() {
+            anyhow::bail!("selection requests must contain at least one choice");
+        }
+
         Ok(self.ctx.interaction.request_selection(request).await)
     }
 
