@@ -1,5 +1,5 @@
 package libnero:extension;
 
 world bindings {
-    include nero:extension/extension@0.1.0-draft;
+    include nero:extension/extension@0.1.0-draft-2026-10-15;
 }

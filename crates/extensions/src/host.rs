@@ -5,10 +5,38 @@ use wasmtime::{Engine, component::Component};
 
 use std::sync::Arc;
 
-use nero_keyvalue_ttl::Store;
-use nero_portal::{CallbackTransport, Interaction, Opener};
+use nero_keyvalue_ttl::{KeyValueTTLCtx, Store};
+use nero_portal::{CallbackTransport, Interaction, Opener, PortalCtx};
 
-use crate::extension::WasmExtension;
+use crate::extension::{ExtensionCtx, WasmExtension};
+
+#[derive(Default)]
+pub struct ExtensionOptions {
+    ctx: ExtensionCtx,
+}
+
+impl ExtensionOptions {
+    pub fn with_keyvalue(mut self, store: Arc<dyn Store>) -> Self {
+        self.ctx.keyvalue = Some(KeyValueTTLCtx::new(store));
+        self
+    }
+
+    pub fn with_portal(
+        mut self,
+        interaction: Arc<dyn Interaction>,
+        opener: Arc<dyn Opener>,
+        callbacks: Arc<dyn CallbackTransport>,
+    ) -> Self {
+        self.ctx.portal = Some(PortalCtx::new(interaction, opener, callbacks));
+        self
+    }
+}
+
+impl From<ExtensionOptions> for ExtensionCtx {
+    fn from(options: ExtensionOptions) -> Self {
+        options.ctx
+    }
+}
 
 pub struct WasmHost {
     engine: Engine,
@@ -40,10 +68,7 @@ impl WasmHost {
     pub async fn load_extension_async<P: AsRef<Path>>(
         &self,
         path: P,
-        keyvalue: Arc<dyn Store>,
-        interaction: Arc<dyn Interaction>,
-        opener: Arc<dyn Opener>,
-        callbacks: Arc<dyn CallbackTransport>,
+        options: ExtensionOptions,
     ) -> wasmtime::Result<WasmExtension> {
         let path = path.as_ref();
 
@@ -55,16 +80,8 @@ impl WasmHost {
             Payload::Module(..) => unreachable!(),
         };
 
-        let extension = WasmExtension::instantiate_async(
-            version,
-            &component,
-            metadata,
-            keyvalue,
-            interaction,
-            opener,
-            callbacks,
-        )
-        .await?;
+        let extension =
+            WasmExtension::instantiate_async(version, &component, metadata, options.into()).await?;
 
         Ok(extension)
     }

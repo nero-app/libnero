@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use anyhow::{Result, anyhow};
-use nero_keyvalue_ttl::{KeyValueTTL, KeyValueTTLCtx, KeyValueTTLView, Store as KeyValueTTLStore};
-use nero_portal::{CallbackTransport, Interaction, Opener, Portal, PortalCtx, PortalView};
+use anyhow::{Context, Result, anyhow};
+use nero_keyvalue_ttl::{KeyValueTTL, KeyValueTTLCtx, KeyValueTTLView};
+use nero_portal::{Portal, PortalCtx, PortalView};
 use semver::Version;
 use wasm_metadata::Metadata;
 use wasmtime::{Store, component::Component};
@@ -18,9 +18,10 @@ use crate::{
     wit::{ExtensionPre, since_v0_1_0_draft},
 };
 
-struct ExtensionCtx {
-    keyvalue: KeyValueTTLCtx,
-    portal: PortalCtx,
+#[derive(Default)]
+pub(crate) struct ExtensionCtx {
+    pub(crate) keyvalue: Option<KeyValueTTLCtx>,
+    pub(crate) portal: Option<PortalCtx>,
 }
 
 pub struct WasmState {
@@ -62,13 +63,23 @@ impl WasiHttpView for WasmState {
 
 impl KeyValueTTLView for WasmState {
     fn keyvalue_ttl(&mut self) -> KeyValueTTL<'_> {
-        KeyValueTTL::new(&self.extension_ctx.keyvalue, &mut self.table)
+        let ctx = self
+            .extension_ctx
+            .keyvalue
+            .as_ref()
+            .expect("keyvalue imports are linked only when a store is configured");
+        KeyValueTTL::new(ctx, &mut self.table)
     }
 }
 
 impl PortalView for WasmState {
     fn portal(&mut self) -> Portal<'_> {
-        Portal::new(&self.extension_ctx.portal, &mut self.table)
+        let ctx = self
+            .extension_ctx
+            .portal
+            .as_ref()
+            .expect("portal imports are linked only when portal services are configured");
+        Portal::new(ctx, &mut self.table)
     }
 }
 
@@ -84,15 +95,14 @@ impl WasmExtension {
         version: Version,
         component: &Component,
         metadata: Metadata,
-        keyvalue: Arc<dyn KeyValueTTLStore>,
-        interaction: Arc<dyn Interaction>,
-        opener: Arc<dyn Opener>,
-        callbacks: Arc<dyn CallbackTransport>,
+        extension_ctx: ExtensionCtx,
     ) -> Result<Self> {
         let extension_pre = match version {
-            v if v >= *since_v0_1_0_draft::MIN_VER => {
-                let linker = since_v0_1_0_draft::linker(component.engine())?;
-                let pre = linker.instantiate_pre(component)?;
+            v if v == *since_v0_1_0_draft::VERSION => {
+                let linker = since_v0_1_0_draft::linker(component.engine(), &extension_ctx)?;
+                let pre = linker.instantiate_pre(component).context(
+                    "extension imports are incompatible with the configured host capabilities",
+                )?;
                 Ok(ExtensionPre::V0_1_0_DRAFT(
                     since_v0_1_0_draft::ExtensionPre::new(pre)?,
                 ))
@@ -105,10 +115,7 @@ impl WasmExtension {
         Ok(Self {
             extension_pre,
             metadata: Arc::new(metadata),
-            extension_ctx: Arc::new(ExtensionCtx {
-                keyvalue: KeyValueTTLCtx::new(keyvalue),
-                portal: PortalCtx::new(interaction, opener, callbacks),
-            }),
+            extension_ctx: Arc::new(extension_ctx),
             supports_tracker,
         })
     }
@@ -157,7 +164,7 @@ impl Extension for WasmExtension {
     async fn search(
         &self,
         query: &str,
-        page: Option<u16>,
+        cursor: Option<&str>,
         filters: Vec<SearchFilter>,
     ) -> Result<SeriesPage> {
         let mut store = Store::new(
@@ -166,7 +173,7 @@ impl Extension for WasmExtension {
         );
 
         let extension = self.extension_pre.instantiate_async(&mut store).await?;
-        extension.search(store, query, page, filters).await
+        extension.search(store, query, cursor, filters).await
     }
 
     async fn get_series_info(&self, series_id: &str) -> Result<Series> {
@@ -182,7 +189,7 @@ impl Extension for WasmExtension {
     async fn get_series_episodes(
         &self,
         series_id: &str,
-        page: Option<u16>,
+        cursor: Option<&str>,
     ) -> Result<EpisodesPage> {
         let mut store = Store::new(
             self.extension_pre.engine(),
@@ -190,7 +197,9 @@ impl Extension for WasmExtension {
         );
 
         let extension = self.extension_pre.instantiate_async(&mut store).await?;
-        extension.get_series_episodes(store, series_id, page).await
+        extension
+            .get_series_episodes(store, series_id, cursor)
+            .await
     }
 
     async fn get_series_videos(&self, series_id: &str, episode_id: &str) -> Result<Vec<Video>> {

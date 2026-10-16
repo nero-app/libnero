@@ -1,0 +1,348 @@
+package nero:extension@0.1.0-draft-2026-10-15;
+
+interface types {
+  use wasi:http/types@0.2.7.{outgoing-request, error-code};
+
+  /// The set of errors that may be raised by extension interfaces.
+  variant error {
+    /// A resource required to complete the operation does not exist.
+    not-found,
+    /// The caller has not established the authority required to perform
+    /// the operation.
+    unauthorized,
+    /// The caller is recognized but is not allowed to perform the
+    /// operation or access the requested resource.
+    forbidden,
+    /// A transport or protocol-level failure occurred while making an HTTP
+    /// request. Receiving an HTTP response with an unsuccessful status is
+    /// not, by itself, an instance of this case.
+    http(error-code),
+    /// Some implementation-specific error has occurred. The payload is
+    /// intended for diagnostics; its contents are unspecified and callers
+    /// must not depend on them.
+    other(option<string>),
+  }
+
+  /// Represents a media resource that can be retrieved through different protocols.
+  ///
+  /// This variant allows the specification of media content (such as videos, images, or torrents)
+  /// that may be accessible via HTTP requests or through peer-to-peer networks
+  /// using magnet URIs.
+  variant media-resource {
+    /// An outgoing HTTP request for retrieving resources via web protocols.
+    ///
+    /// This contains all the necessary information for issuing an HTTP request to retrieve
+    /// a remote asset (such as a video, image, or metadata file), including the full request
+    /// details (scheme, authority, path, headers, method, and optional body content).
+    http-request(outgoing-request),
+    /// A magnet URI used to identify and retrieve content from peer-to-peer networks.
+    ///
+    /// Unlike HTTP requests which specify how to fetch from a location, magnet URIs identify
+    /// content by its cryptographic hash, allowing it to be retrieved from distributed networks
+    /// (such as BitTorrent) without relying on a centralized server.
+    ///
+    /// This is a simple URI string with no HTTP-specific concepts (no headers, body, or method).
+    ///
+    /// Example format: `magnet:?xt=urn:btih:HASH&dn=name&tr=tracker_url`
+    magnet-uri(string),
+  }
+
+  /// Represents a series with its basic details.
+  record series {
+    /// Unique identifier for the series.
+    id: string,
+    /// Title of the series.
+    title: string,
+    /// The media resource from which the series poster image can be retrieved.
+    ///
+    /// This can be either an HTTP request or a magnet URI, depending on how the poster is distributed.
+    poster-resource: option<media-resource>,
+    /// Synopsis or description of the series, if available.
+    synopsis: option<string>,
+    /// Type of the series (e.g., TV show, movie), if available.
+    %type: option<string>,
+  }
+
+  /// Represents a page of series results, including pagination information.
+  ///
+  /// This record is particularly useful when the search results need to be broken down into multiple pages.
+  /// Instead of returning a complete list of all available series at once, `series-page` allows
+  /// paginate the results, making it easier to manage large datasets.
+  record series-page {
+    /// List of series on the current page.
+    series: list<series>,
+    /// The continuation token to use to fetch the next page. If this is
+    /// `none`, there are no more series to fetch.
+    ///
+    /// The token is opaque and must be passed back unchanged to `search`
+    /// with the same `query` and `filters`.
+    cursor: option<string>,
+  }
+
+  /// Represents an individual filter used in search queries.
+  ///
+  /// This structure is useful for associating a user-friendly name with its corresponding
+  /// unique filter identifier that will be used in search operations.
+  record filter {
+    /// Unique identifier for the filter (e.g., "slice_of_life").
+    id: string,
+    /// Display name for the filter (e.g., "Slice of life").
+    display-name: string,
+  }
+
+  /// Represents a category of filters that groups multiple related filters under a common type.
+  ///
+  /// This record acts as a wrapper for multiple `filter` entries, allowing the definition
+  /// of filter categories such as "Genre" or "Release Year".
+  record filter-category {
+    /// Unique identifier for the filter category (e.g., "genre").
+    id: string,
+    /// Display name for the filter category (e.g., "Genre").
+    display-name: string,
+    /// List of filters that belong to this category.
+    filters: list<filter>,
+  }
+
+  /// Represents a filter to be used specifically in the `search` method.
+  ///
+  /// Unlike `filter-category` and `filter`, this record omits displayable information (like `display-name`),
+  /// focusing only on the filter category identifier and selected values.
+  record search-filter {
+    /// Unique identifier of the filter category (e.g., "genre").
+    id: string,
+    /// List of selected filters identifiers that apply to the given filter category.
+    ///
+    /// Each value corresponds to a specific filter identifier within the category.
+    /// Example for a `genre` filter: `["action", "drama"]`.
+    values: list<string>,
+  }
+
+  /// Represents an episode of a series.
+  record episode {
+    /// Unique identifier for the episode.
+    id: string,
+    /// Episode number in the series.
+    number: u16,
+    /// Title of the episode, if available.
+    title: option<string>,
+    /// The media resource from which the episode thumbnail image can be retrieved.
+    ///
+    /// This can be either an HTTP request or a magnet URI, depending on how the thumbnail is distributed.
+    thumbnail-resource: option<media-resource>,
+    /// Description of the episode, if available.
+    description: option<string>,
+  }
+
+  /// Represents a page of episode results, including pagination information.
+  ///
+  /// Similar to the `series-page`, `episodes-page` is useful for handling large numbers of episodes
+  /// by dividing them into manageable pages. This is especially helpful for series with numerous episodes,
+  /// allowing to return only a part of the episodes to avoid an overload when retrieving and returning the data.
+  record episodes-page {
+    /// List of episodes on the current page.
+    episodes: list<episode>,
+    /// The continuation token to use to fetch the next page. If this is
+    /// `none`, there are no more episodes to fetch.
+    ///
+    /// The token is opaque and must be passed back unchanged to
+    /// `get-series-episodes` with the same `series-id`.
+    cursor: option<string>,
+  }
+
+  /// Represents the resolution of a video stream with height and width.
+  ///
+  /// For example, a resolution of `1920x1080` would be represented as `(1080, 1920)`.
+  type resolution = tuple<u16, u16>;
+
+  /// Represents a video stream for a specific episode.
+  record video {
+    /// The media resource from which the video stream can be retrieved.
+    ///
+    /// This can be either an HTTP request for direct streaming or a magnet URI for peer-to-peer
+    /// content distribution (e.g., torrent files).
+    media-resource: media-resource,
+    /// The server hosting the video stream.
+    server: string,
+    /// The resolution of the video stream.
+    resolution: resolution,
+  }
+}
+
+/// The `extractor` interface provides a set of functions to interact with the series-based media platform.
+/// It allows users to search for series, retrieve episodes and fetch video streams for episodes.
+interface extractor {
+  use types.{filter-category, search-filter, series-page, series, episodes-page, video, error};
+
+  /// Returns a list of available filters to use in the `search` method.
+  filters: func() -> result<list<filter-category>, error>;
+
+  /// Searches for series based on a query string, an optional cursor, and a list of filters.
+  ///
+  /// * `query`: The search query string, used to find matching series.
+  /// * `cursor`: `none` to begin searching, or a cursor returned by the
+  ///   preceding call with the same `query` and `filters`.
+  /// * `filters`: List of filters to apply to the search.
+  ///
+  /// Returns a `series-page` if successful, or an `error` describing why the
+  /// search could not be completed.
+  search: func(query: string, cursor: option<string>, filters: list<search-filter>) -> result<series-page, error>;
+
+  /// Retrieves information about a specific series, identified by its unique `series-id`.
+  ///
+  /// * `series-id`: The unique identifier for the series to retrieve information about.
+  ///
+  /// Fails with `error::not-found` if the identifier is not recognized.
+  get-series-info: func(series-id: string) -> result<series, error>;
+
+  /// Retrieves a paginated list of episodes for a given series, identified by its unique `series-id`.
+  ///
+  /// * `series-id`: The unique identifier for the series from which episodes are to be fetched.
+  /// * `cursor`: `none` to begin listing, or a cursor returned by the
+  ///   preceding call for the same `series-id`.
+  ///
+  /// Fails with `error::not-found` if the series identifier is not
+  /// recognized.
+  get-series-episodes: func(series-id: string, cursor: option<string>) -> result<episodes-page, error>;
+
+  /// Retrieves the available video streams for a given episode of a specific series.
+  ///
+  /// * `series-id`: The unique identifier for the series to which the episode belongs.
+  /// * `episode-id`: The unique identifier of the episode for which video streams are requested.
+  ///
+  /// Fails with `error::not-found` if the series or episode identifier is
+  /// not recognized.
+  get-series-videos: func(series-id: string, episode-id: string) -> result<list<video>, error>;
+}
+
+/// The `tracker` interface stores viewing state for series.
+///
+/// Entries are grouped into a fixed set of states rather than custom lists. An
+/// entry wraps a `series` with the viewing progress and other
+/// tracking information associated with it.
+///
+/// Series identifiers are in the identifier space of the implementation. They
+/// are opaque to callers and must be passed back unchanged. The implementation
+/// is responsible for resolving an identifier to the corresponding series.
+interface tracker {
+  use types.{series, error};
+
+  /// The viewing state of a tracked series.
+  enum watch-status {
+    /// The series is currently being watched, including a repeat viewing.
+    watching,
+    /// The series has been watched to completion and is not currently
+    /// being watched again.
+    completed,
+    /// Watching has been paused with the intention of resuming later.
+    on-hold,
+    /// Watching has stopped with no present intention of resuming.
+    dropped,
+    /// Watching has not started and is intended for the future.
+    plan-to-watch,
+  }
+
+  /// Additional information recorded for a tracked series.
+  record entry-details {
+    /// The number of installments watched in the current viewing, such as
+    /// the number of episodes watched.
+    ///
+    /// This is a count and not the identifier of a particular installment.
+    /// It may be zero.
+    progress: u32,
+    /// A normalized score from 1 to 100, or `none` when the series has not
+    /// been scored.
+    score: option<u8>,
+    /// The number of additional times the series has been completed after
+    /// its first completion.
+    ///
+    /// For example, a series watched once has a repeat count of zero. A
+    /// repeat viewing in progress has `watch-status::watching` and retains
+    /// the number of repeat viewings already completed.
+    repeat-count: u32,
+    /// Free-form notes associated with the entry, or `none` when no notes
+    /// are recorded.
+    notes: option<string>,
+  }
+
+  /// A tracked series together with its stored tracking information.
+  record entry {
+    /// The series being tracked.
+    series: series,
+    /// The viewing state of the series.
+    status: watch-status,
+    /// The additional details associated with the series.
+    details: entry-details,
+  }
+
+  /// One page of tracked entries.
+  record entries-page {
+    /// The entries in this page. Their order is implementation-defined.
+    entries: list<entry>,
+    /// The continuation token to use to fetch the next page. If this is
+    /// `none`, there are no more entries to fetch.
+    ///
+    /// The token is opaque and is valid only for a subsequent
+    /// `list-entries` call with the same `status`.
+    cursor: option<string>,
+  }
+
+  /// Returns one page of entries having the given viewing state.
+  ///
+  /// * `status`: The viewing state by which to select entries.
+  /// * `cursor`: `none` to begin listing, or a cursor returned by the
+  ///   preceding call for the same `status`.
+  ///
+  /// An empty tracker, or a state containing no entries, returns an empty
+  /// page with no cursor.
+  list-entries: func(status: watch-status, cursor: option<string>) -> result<entries-page, error>;
+
+  /// Returns the tracked entry for a series.
+  ///
+  /// * `series-id`: The opaque identifier of the series to look up.
+  ///
+  /// Returns the tracked entry associated with the series, or `none` if the
+  /// series is recognized but has no tracked entry.
+  ///
+  /// Fails with `error::not-found` if the series identifier is not
+  /// recognized.
+  get-entry: func(series-id: string) -> result<option<entry>, error>;
+
+  /// Creates or replaces the tracked entry for a series.
+  ///
+  /// * `series-id`: The opaque identifier of the series to track.
+  /// * `status`: The viewing state to store.
+  /// * `details`: The complete additional details to store. Setting an
+  ///   optional field to `none` clears the value that was previously stored.
+  ///
+  /// If no entry exists, one is created. Otherwise its state is replaced.
+  /// The returned entry contains the values actually stored after any
+  /// normalization performed by the implementation.
+  ///
+  /// The implementation resolves `series-id` itself and returns the
+  /// corresponding canonical series in the resulting entry.
+  ///
+  /// Fails with `error::not-found` if the identifier is not recognized.
+  save-entry: func(series-id: string, status: watch-status, details: entry-details) -> result<entry, error>;
+
+  /// Removes the tracked entry for a series.
+  ///
+  /// * `series-id`: The opaque identifier of the series to stop tracking.
+  ///
+  /// If the series is recognized but has no tracked entry, this succeeds
+  /// without changing anything.
+  ///
+  /// Fails with `error::not-found` if the series identifier is not
+  /// recognized.
+  remove-entry: func(series-id: string) -> result<_, error>;
+}
+
+world extension {
+  import wasi:io/poll@0.2.7;
+  import wasi:clocks/monotonic-clock@0.2.7;
+  import wasi:io/error@0.2.7;
+  import wasi:io/streams@0.2.7;
+  import wasi:http/types@0.2.7;
+  import types;
+
+  export extractor;
+}

@@ -150,7 +150,7 @@ impl Extension {
         &self,
         mut store: wasmtime::Store<WasmState>,
         query: &str,
-        page: Option<u16>,
+        cursor: Option<&str>,
         filters: Vec<SearchFilter>,
     ) -> Result<SeriesPage> {
         match self {
@@ -159,7 +159,7 @@ impl Extension {
 
                 let res = extension
                     .nero_extension_extractor()
-                    .call_search(&mut store, query, page, &filters)
+                    .call_search(&mut store, query, cursor, &filters)
                     .await?
                     .map_err(|err| anyhow!("{err}"))?;
 
@@ -190,13 +190,13 @@ impl Extension {
         &self,
         mut store: wasmtime::Store<WasmState>,
         series_id: &str,
-        page: Option<u16>,
+        cursor: Option<&str>,
     ) -> Result<EpisodesPage> {
         match self {
             Extension::V0_1_0_DRAFT(extension, _) => {
                 let res = extension
                     .nero_extension_extractor()
-                    .call_get_series_episodes(&mut store, series_id, page)
+                    .call_get_series_episodes(&mut store, series_id, cursor)
                     .await?
                     .map_err(|err| anyhow!("{err}"))?;
 

@@ -15,7 +15,7 @@ use wasmtime_wasi_http::{WasiHttpView, types::HostOutgoingRequest};
 
 use crate::{
     AsyncTryIntoWithStore,
-    extension::WasmState,
+    extension::{ExtensionCtx, WasmState},
     wit::{
         AsyncTryFromWithStore, IntoHttpRequest,
         since_v0_1_0_draft::nero::extension::types::MediaResource,
@@ -27,8 +27,8 @@ use tracker::exports::nero::extension::tracker::{EntriesPage, Entry, EntryDetail
 pub(super) type Tracker = tracker::exports::nero::extension::tracker::Guest;
 pub(super) type TrackerIndices = tracker::exports::nero::extension::tracker::GuestIndices;
 
-pub static MIN_VER: LazyLock<Version> =
-    LazyLock::new(|| Version::parse("0.1.0-draft").expect("invalid version"));
+pub static VERSION: LazyLock<Version> =
+    LazyLock::new(|| Version::parse("0.1.0-draft-2026-10-15").expect("invalid version"));
 
 bindgen!({
     path: "./wit/v0.1.0-draft",
@@ -36,10 +36,7 @@ bindgen!({
     imports: { default: async | trappable, },
     exports: { default: async },
     with: {
-        "wasi:http": wasmtime_wasi_http::bindings::http,
-        "wasi:logging": nero_wasi_logging::logging,
-        "nero:keyvalue-ttl": nero_keyvalue_ttl::keyvalue_ttl,
-        "nero:portal": nero_portal::portal,
+        "wasi:http/types/outgoing-request": wasmtime_wasi_http::types::HostOutgoingRequest,
     },
 });
 
@@ -48,21 +45,25 @@ mod tracker {
 
     bindgen!({
         path: "./wit/v0.1.0-draft",
-        interfaces: "export nero:extension/tracker@0.1.0-draft;",
+        interfaces: "export nero:extension/tracker@0.1.0-draft-2026-10-15;",
         exports: { default: async },
         with: {
-            "nero:extension/types@0.1.0-draft": super::nero::extension::types,
+            "nero:extension/types@0.1.0-draft-2026-10-15": super::nero::extension::types,
         },
     });
 }
 
-pub fn linker(engine: &Engine) -> Result<Linker<WasmState>> {
+pub fn linker(engine: &Engine, ctx: &ExtensionCtx) -> Result<Linker<WasmState>> {
     let mut linker = Linker::<WasmState>::new(engine);
-    wasmtime_wasi::p2::add_to_linker_async(&mut linker).unwrap();
-    wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker).unwrap();
-    nero_wasi_logging::add_to_linker(&mut linker).unwrap();
-    nero_keyvalue_ttl::add_to_linker(&mut linker).unwrap();
-    nero_portal::add_to_linker(&mut linker).unwrap();
+    wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
+    wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;
+    nero_wasi_logging::add_to_linker(&mut linker)?;
+    if ctx.keyvalue.is_some() {
+        nero_keyvalue_ttl::add_to_linker(&mut linker)?;
+    }
+    if ctx.portal.is_some() {
+        nero_portal::add_to_linker(&mut linker)?;
+    }
 
     Ok(linker)
 }
@@ -110,7 +111,7 @@ impl AsyncTryFromWithStore<SeriesPage> for crate::types::SeriesPage {
         }
         Ok(crate::types::SeriesPage {
             items,
-            has_next_page: page.has_next_page,
+            cursor: page.cursor,
         })
     }
 }
@@ -144,7 +145,7 @@ impl AsyncTryFromWithStore<EpisodesPage> for crate::types::EpisodesPage {
         }
         Ok(crate::types::EpisodesPage {
             items,
-            has_next_page: page.has_next_page,
+            cursor: page.cursor,
         })
     }
 }

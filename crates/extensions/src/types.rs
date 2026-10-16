@@ -11,7 +11,7 @@ pub enum MediaResource {
 #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Page<T> {
     pub items: Vec<T>,
-    pub has_next_page: bool,
+    pub cursor: Option<String>,
 }
 
 pub type SeriesPage = Page<Series>;

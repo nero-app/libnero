@@ -1,0 +1,308 @@
+package nero:portal@0.1.0-draft-2026-10-15;
+
+/// The `callback` interface provides a means of being reached from outside the
+/// host application: an address the host sets aside for the caller, and the
+/// delivery of a single URI directed at it.
+///
+/// Nothing here causes a URI to be sent. Arranging that is the caller's
+/// business — handing the address to a service that is to return to it, or to
+/// a person who will follow a link.
+///
+/// A host may have no way of being reached from outside itself. That is not
+/// exceptional, and callers are expected to carry on without.
+interface callback {
+  use wasi:clocks/monotonic-clock@0.2.7.{duration};
+  use wasi:io/poll@0.2.7.{pollable};
+
+  /// Why a listener could not be established.
+  variant listen-error {
+    /// This host cannot be reached from outside itself, so no address it
+    /// set aside would be of any use. This is a standing property of the
+    /// host rather than a fault, and a caller that needs to be reached
+    /// should turn to some other means.
+    unsupported,
+    /// The host failed to listen, for a reason described by the payload.
+    /// The string is meant for diagnostics; its contents are unspecified
+    /// and callers must not depend on them.
+    other(string),
+  }
+
+  /// Why nothing was delivered.
+  variant receive-error {
+    /// The timeout elapsed with nothing delivered.
+    expired,
+    /// Whoever was to deliver gave up, for a reason described by the
+    /// payload. The string is meant for diagnostics; its contents are
+    /// unspecified and callers must not depend on them.
+    other(string),
+  }
+
+  /// An address set aside for the caller, and the means of receiving a
+  /// single URI delivered to it.
+  ///
+  /// The host decides whether the address is stable or variable. It may
+  /// expose a stable, pre-registerable address scoped to the caller, or
+  /// issue a different address for each listener. A caller cannot choose or
+  /// influence the address it is given, and must not assume that it can be
+  /// reused after the listener is dropped unless the host documents that
+  /// guarantee.
+  ///
+  /// A listener is listening from the moment it exists, which is before its
+  /// address can be read. A URI may be delivered the moment the address is
+  /// known to anyone else, and a listener established after the fact would
+  /// miss it.
+  resource listener {
+    /// Sets aside an address and begins listening.
+    ///
+    /// * `timeout`: How long to listen before giving up with
+    ///   `receive-error::expired`.
+    ///
+    /// Returns a listener, or the reason one could not be established.
+    listen: static func(timeout: duration) -> result<listener, listen-error>;
+    /// Returns the absolute URI that must be used to reach this
+    /// listener.
+    ///
+    /// The returned string is a syntactically valid absolute URI. It does
+    /// not change for as long as the listener exists, and this method may
+    /// be called as often as the caller likes, including after the listener
+    /// has become ready.
+    address: func() -> string;
+    /// Returns a pollable which becomes ready once a URI has been
+    /// delivered or the listener has given up. May be called more than
+    /// once; every pollable so returned becomes ready at the same moment.
+    ///
+    /// The pollable can be passed to `wasi:io/poll.poll` together with other
+    /// pollables, allowing other events to be observed without abandoning
+    /// the wait for a callback.
+    ///
+    /// The returned `pollable` is a child resource of this `listener` and
+    /// must be dropped before it. Dropping the `listener` while a child
+    /// pollable is still alive traps.
+    subscribe: func() -> pollable;
+    /// Returns the URI that was delivered, once the listener is ready.
+    ///
+    /// The outer `option` stands for readiness; callers can wait on it
+    /// becoming `some` using `subscribe`. The outer `result` allows the
+    /// value to be taken at most once: it is success on the first call in
+    /// which the outer option is `some`, and an error on every call after
+    /// that.
+    ///
+    /// The inner `result` represents either the URI that was delivered or
+    /// the reason nothing was delivered.
+    ///
+    /// The URI is returned whole, with everything it carried, including
+    /// any fragment. A fragment is not transmitted when a URI is fetched
+    /// over a network protocol, so a host that listens by serving its
+    /// address must recover the fragment by some other means; callers may
+    /// count on it being present.
+    ///
+    /// A listener takes delivery at most once. Further deliveries are not
+    /// delivered through this listener.
+    get: func() -> option<result<result<string, receive-error>>>;
+  }
+}
+
+/// The `interaction` interface provides a set of functions to request values
+/// from, and present information to, the person operating the host
+/// application.
+///
+/// Nothing here describes how a request is presented. Callers must not assume
+/// any particular presentation.
+///
+/// A function that requests a value waits until the host supplies an answer or
+/// determines that none will be supplied. The latter is reported as `none`
+/// rather than as an error and may mean, for example, that the person dismissed
+/// the request, that the host could not present it, or that the host declined to
+/// do so. Callers must treat an unanswered request as an ordinary outcome.
+interface interaction {
+  use wasi:io/poll@0.2.7.{pollable};
+
+  /// How important an interaction is. A host may use this to decide how, or
+  /// whether, to present it.
+  enum severity {
+    info,
+    warning,
+    error,
+  }
+
+  /// A request for a single line of text.
+  record text-request {
+    /// A short heading naming what is being asked for.
+    title: string,
+    /// A fuller description of what is being asked for, and of what
+    /// constitutes an acceptable answer.
+    description: option<string>,
+    /// An example of the expected form, presented in place of an empty
+    /// answer. It is never returned as a value.
+    placeholder: option<string>,
+    /// An answer to start from, allowing an existing value to be amended
+    /// rather than retyped.
+    initial-value: option<string>,
+    /// Whether the value is sensitive.
+    ///
+    /// When set, the host must conceal the value as it is given, must not
+    /// write it to logs or diagnostics, and must not retain it in any
+    /// history of past answers. This constrains the host only; the caller
+    /// receives the value in the clear and is responsible for it
+    /// thereafter.
+    sensitive: bool,
+    /// A location where the person can find out how to obtain the value,
+    /// which the host may present alongside the request.
+    reference: option<string>,
+  }
+
+  /// One of the answers offered by a selection request.
+  record choice-item {
+    /// The primary text naming this answer.
+    label: string,
+    /// Supporting text distinguishing this answer from the others. A host
+    /// may omit it where there is no room to present it.
+    detail: option<string>,
+    /// Whether this answer should initially be selected. This is a
+    /// presentation hint that the host may ignore.
+    preselected: bool,
+  }
+
+  /// A request to choose among a fixed set of answers.
+  record selection-request {
+    /// A short heading naming what is being decided.
+    title: string,
+    /// A fuller description of the decision.
+    description: option<string>,
+    /// How important the decision is.
+    severity: severity,
+    /// The answers offered, in the order they should be presented. This
+    /// list must not be empty.
+    choices: list<choice-item>,
+    /// Whether more than one answer may be chosen.
+    allow-multiple: bool,
+  }
+
+  /// A standing indication that work is under way, and optionally a means
+  /// of asking for it to stop.
+  ///
+  /// The indication begins when the resource is constructed and lasts for as
+  /// long as it is alive; a host may wait a short while before presenting
+  /// anything, so that short-lived work is not announced. A caller must drop
+  /// the resource once the work has ended, whether or not it succeeded.
+  /// Failing to do so leaves the indication in place: nothing is interrupted
+  /// and no error is raised, but the person is told work continues that has
+  /// already finished.
+  resource progress {
+    /// Announces that work has begun.
+    ///
+    /// * `title`: A short description of the work. It stays as given for
+    ///   the lifetime of the indication.
+    /// * `cancellable`: Whether the host offers a way to ask for the work
+    ///   to stop. When unset, the pollable returned by
+    ///   `subscribe-cancellation` never becomes ready.
+    constructor(title: string, cancellable: bool);
+    /// Revises the indication. May be called as often as the caller likes
+    /// for as long as the resource is alive, including after the work has
+    /// been asked to stop.
+    ///
+    /// * `message`: Replacement text describing the current step, or
+    ///   `none` to leave it as it was.
+    /// * `percent`: How much of the work is done, from zero to one
+    ///   hundred, or `none` to leave the extent unstated. What counts as
+    ///   the whole is for the caller to decide; the host presents the
+    ///   fraction without interpreting it. Values above one hundred are
+    ///   treated as one hundred.
+    ///
+    /// When no extent is stated, the host indicates only that the work
+    /// continues.
+    report: func(message: option<string>, percent: option<u8>);
+    /// Returns a pollable which becomes ready once the work has been asked
+    /// to stop. May be called more than once; every pollable so returned
+    /// becomes ready at the same moment.
+    ///
+    /// Nothing is interrupted, and the work is not asked to stop again.
+    /// The caller observes this and stops of its own accord, so that it
+    /// can release what it holds. A caller that ignores it is not obliged
+    /// to stop.
+    ///
+    /// The pollable can be waited on together with whatever else the
+    /// caller is waiting for, so that cancellation is noticed without
+    /// abandoning the wait.
+    ///
+    /// The returned `pollable` is a child resource of this `progress` and
+    /// must be dropped before it. Dropping the `progress` while a child
+    /// pollable is still alive traps.
+    subscribe-cancellation: func() -> pollable;
+  }
+
+  /// Asks for a single line of text.
+  ///
+  /// * `request`: What is being asked for.
+  ///
+  /// Returns the value that was given, which may be empty, or `none` if the
+  /// request went unanswered.
+  ///
+  /// A host does not check the value beyond what it needs to present the
+  /// request. A caller that requires a particular form must check the value
+  /// itself, and may ask again with a `description` explaining what was
+  /// wrong.
+  request-text: func(request: text-request) -> option<string>;
+
+  /// Asks for a choice among a fixed set of answers.
+  ///
+  /// * `request`: The decision and the answers offered.
+  ///
+  /// This function traps if `request.choices` is empty.
+  ///
+  /// Returns the indices into `request.choices` of the answers that were
+  /// chosen, or `none` if the request went unanswered. Every returned index
+  /// refers to an entry in `request.choices` and occurs at most once; their
+  /// order is unspecified. The list contains at most one index when
+  /// `request.allow-multiple` is unset. Whether an answered request may
+  /// contain no selected choices is determined by the host.
+  request-selection: func(request: selection-request) -> option<list<u32>>;
+
+  /// States something without asking for anything.
+  ///
+  /// This returns as soon as the host has taken the message; it does not
+  /// wait for the message to be seen. A host may discard or suppress
+  /// messages. Callers must not depend on a message having been read, and
+  /// must not convey through it anything their own correctness rests on.
+  ///
+  /// * `severity`: How important the message is.
+  /// * `message`: What is being stated.
+  /// * `detail`: Supporting text. A host may omit it.
+  notify: func(severity: severity, message: string, detail: option<string>);
+}
+
+/// The `opener` interface provides a function to hand a URI to the system
+/// outside the host application, so that whatever is arranged to deal with its
+/// scheme takes it from there.
+///
+/// A host may have nothing to hand URIs to. That is not exceptional, and
+/// callers are expected to carry on without.
+interface opener {
+  /// Hands a URI to whatever the system has arranged to deal with its
+  /// scheme.
+  ///
+  /// * `uri`: The absolute URI to hand over.
+  ///
+  /// Returns whether the host passed it on.
+  ///
+  /// The host validates the URI and may reject it according to its policy,
+  /// including because of its scheme or destination. A host must not hand
+  /// over a URI it does not recognise as safe. An invalid or rejected URI
+  /// returns `false`.
+  ///
+  /// A result of `true` indicates only that the URI left the host. It
+  /// carries no information about what the system did with it, and no
+  /// indication that it was seen. A result of `false` is not exceptional: a
+  /// host with nothing to hand URIs to always returns it. A caller that
+  /// needs the URI to be reached should fall back to presenting it and
+  /// letting the person open it themselves.
+  open: func(uri: string) -> bool;
+}
+
+world imports {
+  import wasi:io/poll@0.2.7;
+  import interaction;
+  import opener;
+  import wasi:clocks/monotonic-clock@0.2.7;
+  import callback;
+}

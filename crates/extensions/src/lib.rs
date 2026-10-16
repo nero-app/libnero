@@ -6,7 +6,7 @@ mod wit;
 use std::sync::Arc;
 
 pub use extension::WasmExtension;
-pub use host::WasmHost;
+pub use host::{ExtensionOptions, WasmHost};
 pub use wasm_metadata::Metadata;
 
 pub use nero_keyvalue_ttl::{Bucket, Error as StoreError, KeyResponse, Store};
@@ -33,7 +33,7 @@ pub trait Extension {
     fn search(
         &self,
         query: &str,
-        page: Option<u16>,
+        cursor: Option<&str>,
         filters: Vec<SearchFilter>,
     ) -> impl std::future::Future<Output = Result<SeriesPage>>;
 
@@ -43,7 +43,7 @@ pub trait Extension {
     fn get_series_episodes(
         &self,
         series_id: &str,
-        page: Option<u16>,
+        cursor: Option<&str>,
     ) -> impl std::future::Future<Output = Result<EpisodesPage>>;
 
     fn get_series_videos(

@@ -1,5 +1,5 @@
 package libnero:portal;
 
 world bindings {
-    include nero:portal/imports@0.1.0-draft;
+    include nero:portal/imports@0.1.0-draft-2026-10-15;
 }
