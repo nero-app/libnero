@@ -14,7 +14,7 @@ use crate::{
     utils::{HopByHopHeadersExt, IntoReqwestRequest},
 };
 
-pub async fn handle_media_request(
+pub(crate) async fn handle_media_request(
     State(state): State<Arc<ServerState>>,
     Path(resource_id): Path<String>,
     incoming_request: axum::extract::Request,

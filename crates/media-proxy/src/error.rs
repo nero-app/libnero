@@ -4,7 +4,7 @@ use thiserror::Error;
 use tracing::error;
 
 #[derive(Error, Debug)]
-pub enum Error {
+pub(crate) enum Error {
     #[error("Request not found")]
     NotFound,
 

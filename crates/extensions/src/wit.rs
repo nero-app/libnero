@@ -14,7 +14,7 @@ use crate::{
     },
 };
 
-pub mod since_v0_1_0_draft;
+pub(super) mod since_v0_1_0_draft;
 
 pub(super) trait TryFromWithStore<T>: Sized {
     async fn try_from_with_store(value: T, store: &mut Store<WasmState>) -> Result<Self>;
@@ -85,18 +85,18 @@ impl IntoHttpRequest for HostOutgoingRequest {
 }
 
 #[allow(non_camel_case_types)]
-pub enum ExtensionPre {
+pub(super) enum ExtensionPre {
     V0_1_0_DRAFT(since_v0_1_0_draft::ExtensionPre<WasmState>),
 }
 
 impl ExtensionPre {
-    pub fn engine(&self) -> &Engine {
+    pub(super) fn engine(&self) -> &Engine {
         match self {
             ExtensionPre::V0_1_0_DRAFT(extension_pre) => extension_pre.engine(),
         }
     }
 
-    pub async fn instantiate(&self, store: &mut Store<WasmState>) -> Result<Extension> {
+    pub(super) async fn instantiate(&self, store: &mut Store<WasmState>) -> Result<Extension> {
         match self {
             ExtensionPre::V0_1_0_DRAFT(pre) => {
                 let instance = pre.instance_pre().instantiate_async(&mut *store).await?;
@@ -111,7 +111,7 @@ impl ExtensionPre {
         }
     }
 
-    pub fn supports_tracker(&self) -> bool {
+    pub(super) fn supports_tracker(&self) -> bool {
         match self {
             ExtensionPre::V0_1_0_DRAFT(pre) => {
                 since_v0_1_0_draft::TrackerIndices::new(pre.instance_pre()).is_ok()
@@ -121,7 +121,7 @@ impl ExtensionPre {
 }
 
 #[allow(non_camel_case_types)]
-pub enum Extension {
+pub(super) enum Extension {
     V0_1_0_DRAFT(
         since_v0_1_0_draft::Extension,
         Option<since_v0_1_0_draft::Tracker>,
@@ -129,7 +129,7 @@ pub enum Extension {
 }
 
 impl Extension {
-    pub async fn filters(
+    pub(super) async fn filters(
         &self,
         mut store: wasmtime::Store<WasmState>,
     ) -> Result<Vec<FilterCategory>> {
@@ -146,7 +146,7 @@ impl Extension {
         }
     }
 
-    pub async fn search(
+    pub(super) async fn search(
         &self,
         mut store: wasmtime::Store<WasmState>,
         query: &str,
@@ -168,7 +168,7 @@ impl Extension {
         }
     }
 
-    pub async fn get_series_info(
+    pub(super) async fn get_series_info(
         &self,
         mut store: wasmtime::Store<WasmState>,
         series_id: &str,
@@ -186,7 +186,7 @@ impl Extension {
         }
     }
 
-    pub async fn get_series_episodes(
+    pub(super) async fn get_series_episodes(
         &self,
         mut store: wasmtime::Store<WasmState>,
         series_id: &str,
@@ -205,7 +205,7 @@ impl Extension {
         }
     }
 
-    pub async fn get_series_videos(
+    pub(super) async fn get_series_videos(
         &self,
         mut store: wasmtime::Store<WasmState>,
         series_id: &str,
@@ -228,7 +228,7 @@ impl Extension {
         }
     }
 
-    pub async fn list_entries(
+    pub(super) async fn list_entries(
         &self,
         mut store: wasmtime::Store<WasmState>,
         status: WatchStatus,
@@ -246,7 +246,7 @@ impl Extension {
         }
     }
 
-    pub async fn get_entry(
+    pub(super) async fn get_entry(
         &self,
         mut store: wasmtime::Store<WasmState>,
         series_id: &str,
@@ -266,7 +266,7 @@ impl Extension {
         }
     }
 
-    pub async fn save_entry(
+    pub(super) async fn save_entry(
         &self,
         mut store: wasmtime::Store<WasmState>,
         series_id: &str,
@@ -285,7 +285,7 @@ impl Extension {
         }
     }
 
-    pub async fn remove_entry(
+    pub(super) async fn remove_entry(
         &self,
         mut store: wasmtime::Store<WasmState>,
         series_id: &str,

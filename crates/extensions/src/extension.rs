@@ -24,7 +24,7 @@ pub(crate) struct ExtensionCtx {
     pub(crate) portal: Option<PortalCtx>,
 }
 
-pub struct WasmState {
+pub(crate) struct WasmState {
     table: ResourceTable,
     ctx: WasiCtx,
     http_ctx: WasiHttpCtx,

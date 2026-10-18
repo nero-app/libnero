@@ -66,7 +66,7 @@ fn playlist(resource_id: &str, torrent: Torrent) -> Response {
         .unwrap()
 }
 
-pub async fn handle_torrent_stream_request(
+pub(crate) async fn handle_torrent_stream_request(
     State(state): State<Arc<ServerState>>,
     Path((resource_id, file_index)): Path<(String, usize)>,
     incoming_request: axum::extract::Request,

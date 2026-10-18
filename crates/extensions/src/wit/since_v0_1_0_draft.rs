@@ -27,7 +27,7 @@ use tracker::exports::nero::extension::tracker::{EntriesPage, Entry, EntryDetail
 pub(super) type Tracker = tracker::exports::nero::extension::tracker::Guest;
 pub(super) type TrackerIndices = tracker::exports::nero::extension::tracker::GuestIndices;
 
-pub static VERSION: LazyLock<Version> =
+pub(crate) static VERSION: LazyLock<Version> =
     LazyLock::new(|| Version::parse("0.1.0-draft-2026-10-15").expect("invalid version"));
 
 bindgen!({
@@ -53,7 +53,7 @@ mod tracker {
     });
 }
 
-pub fn linker(engine: &Engine, ctx: &ExtensionCtx) -> Result<Linker<WasmState>> {
+pub(crate) fn linker(engine: &Engine, ctx: &ExtensionCtx) -> Result<Linker<WasmState>> {
     let mut linker = Linker::<WasmState>::new(engine);
     wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
     wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;

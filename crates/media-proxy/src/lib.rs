@@ -27,7 +27,7 @@ pub struct TorrentConfig {
     pub torrent_file_selector: Option<Arc<dyn torrent::TorrentFileSelector>>,
 }
 
-pub struct ServerState {
+pub(crate) struct ServerState {
     http_client: reqwest::Client,
     #[cfg(feature = "torrent")]
     torrent_backend: Arc<dyn torrent::TorrentBackend>,

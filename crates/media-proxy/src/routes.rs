@@ -2,6 +2,6 @@ mod media;
 #[cfg(feature = "torrent")]
 mod torrent;
 
-pub use media::*;
+pub(super) use media::*;
 #[cfg(feature = "torrent")]
-pub use torrent::*;
+pub(super) use torrent::*;
