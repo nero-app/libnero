@@ -91,7 +91,7 @@ pub struct WasmExtension {
 }
 
 impl WasmExtension {
-    pub(crate) async fn instantiate_async(
+    pub(crate) fn instantiate(
         version: Version,
         component: &Component,
         metadata: Metadata,
@@ -157,7 +157,7 @@ impl Extractor for WasmExtension {
             WasmState::new(self.extension_ctx.clone()),
         );
 
-        let extension = self.extension_pre.instantiate_async(&mut store).await?;
+        let extension = self.extension_pre.instantiate(&mut store).await?;
         extension.filters(store).await
     }
 
@@ -172,7 +172,7 @@ impl Extractor for WasmExtension {
             WasmState::new(self.extension_ctx.clone()),
         );
 
-        let extension = self.extension_pre.instantiate_async(&mut store).await?;
+        let extension = self.extension_pre.instantiate(&mut store).await?;
         extension.search(store, query, cursor, filters).await
     }
 
@@ -182,7 +182,7 @@ impl Extractor for WasmExtension {
             WasmState::new(self.extension_ctx.clone()),
         );
 
-        let extension = self.extension_pre.instantiate_async(&mut store).await?;
+        let extension = self.extension_pre.instantiate(&mut store).await?;
         extension.get_series_info(store, series_id).await
     }
 
@@ -196,7 +196,7 @@ impl Extractor for WasmExtension {
             WasmState::new(self.extension_ctx.clone()),
         );
 
-        let extension = self.extension_pre.instantiate_async(&mut store).await?;
+        let extension = self.extension_pre.instantiate(&mut store).await?;
         extension
             .get_series_episodes(store, series_id, cursor)
             .await
@@ -208,7 +208,7 @@ impl Extractor for WasmExtension {
             WasmState::new(self.extension_ctx.clone()),
         );
 
-        let extension = self.extension_pre.instantiate_async(&mut store).await?;
+        let extension = self.extension_pre.instantiate(&mut store).await?;
         extension
             .get_series_videos(store, series_id, episode_id)
             .await
@@ -221,7 +221,7 @@ impl Tracker for WasmExtension {
             self.extension_pre.engine(),
             WasmState::new(self.extension_ctx.clone()),
         );
-        let extension = self.extension_pre.instantiate_async(&mut store).await?;
+        let extension = self.extension_pre.instantiate(&mut store).await?;
         extension.list_entries(store, status, cursor).await
     }
 
@@ -230,7 +230,7 @@ impl Tracker for WasmExtension {
             self.extension_pre.engine(),
             WasmState::new(self.extension_ctx.clone()),
         );
-        let extension = self.extension_pre.instantiate_async(&mut store).await?;
+        let extension = self.extension_pre.instantiate(&mut store).await?;
         extension.get_entry(store, series_id).await
     }
 
@@ -244,7 +244,7 @@ impl Tracker for WasmExtension {
             self.extension_pre.engine(),
             WasmState::new(self.extension_ctx.clone()),
         );
-        let extension = self.extension_pre.instantiate_async(&mut store).await?;
+        let extension = self.extension_pre.instantiate(&mut store).await?;
         extension
             .save_entry(store, series_id, status, details)
             .await
@@ -255,7 +255,7 @@ impl Tracker for WasmExtension {
             self.extension_pre.engine(),
             WasmState::new(self.extension_ctx.clone()),
         );
-        let extension = self.extension_pre.instantiate_async(&mut store).await?;
+        let extension = self.extension_pre.instantiate(&mut store).await?;
         extension.remove_entry(store, series_id).await
     }
 }

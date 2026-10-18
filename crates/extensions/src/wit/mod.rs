@@ -16,17 +16,17 @@ use crate::{
 
 pub mod since_v0_1_0_draft;
 
-pub(super) trait AsyncTryFromWithStore<T>: Sized {
+pub(super) trait TryFromWithStore<T>: Sized {
     async fn try_from_with_store(value: T, store: &mut Store<WasmState>) -> Result<Self>;
 }
 
-pub(super) trait AsyncTryIntoWithStore<T> {
+pub(super) trait TryIntoWithStore<T> {
     async fn try_into_with_store(self, store: &mut Store<WasmState>) -> Result<T>;
 }
 
-impl<T, U> AsyncTryIntoWithStore<U> for T
+impl<T, U> TryIntoWithStore<U> for T
 where
-    U: AsyncTryFromWithStore<T>,
+    U: TryFromWithStore<T>,
 {
     async fn try_into_with_store(self, store: &mut Store<WasmState>) -> Result<U> {
         U::try_from_with_store(self, store).await
@@ -96,7 +96,7 @@ impl ExtensionPre {
         }
     }
 
-    pub async fn instantiate_async(&self, store: &mut Store<WasmState>) -> Result<Extension> {
+    pub async fn instantiate(&self, store: &mut Store<WasmState>) -> Result<Extension> {
         match self {
             ExtensionPre::V0_1_0_DRAFT(pre) => {
                 let instance = pre.instance_pre().instantiate_async(&mut *store).await?;

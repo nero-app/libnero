@@ -20,7 +20,7 @@ use crate::{
         EntriesPage, Entry, EntryDetails, EpisodesPage, FilterCategory, SearchFilter, Series,
         SeriesPage, Video, WatchStatus,
     },
-    wit::AsyncTryIntoWithStore,
+    wit::TryIntoWithStore,
 };
 
 pub trait Extractor {

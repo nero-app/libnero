@@ -14,10 +14,10 @@ use wasmtime::{
 use wasmtime_wasi_http::{WasiHttpView, types::HostOutgoingRequest};
 
 use crate::{
-    AsyncTryIntoWithStore,
+    TryIntoWithStore,
     extension::{ExtensionCtx, WasmState},
     wit::{
-        AsyncTryFromWithStore, IntoHttpRequest,
+        IntoHttpRequest, TryFromWithStore,
         since_v0_1_0_draft::nero::extension::types::MediaResource,
     },
 };
@@ -100,7 +100,7 @@ impl From<crate::types::SearchFilter> for SearchFilter {
     }
 }
 
-impl AsyncTryFromWithStore<SeriesPage> for crate::types::SeriesPage {
+impl TryFromWithStore<SeriesPage> for crate::types::SeriesPage {
     async fn try_from_with_store(
         page: SeriesPage,
         store: &mut wasmtime::Store<WasmState>,
@@ -116,7 +116,7 @@ impl AsyncTryFromWithStore<SeriesPage> for crate::types::SeriesPage {
     }
 }
 
-impl AsyncTryFromWithStore<Series> for crate::types::Series {
+impl TryFromWithStore<Series> for crate::types::Series {
     async fn try_from_with_store(
         series: Series,
         store: &mut wasmtime::Store<WasmState>,
@@ -134,7 +134,7 @@ impl AsyncTryFromWithStore<Series> for crate::types::Series {
     }
 }
 
-impl AsyncTryFromWithStore<EpisodesPage> for crate::types::EpisodesPage {
+impl TryFromWithStore<EpisodesPage> for crate::types::EpisodesPage {
     async fn try_from_with_store(
         page: EpisodesPage,
         store: &mut wasmtime::Store<WasmState>,
@@ -150,7 +150,7 @@ impl AsyncTryFromWithStore<EpisodesPage> for crate::types::EpisodesPage {
     }
 }
 
-impl AsyncTryFromWithStore<Episode> for crate::types::Episode {
+impl TryFromWithStore<Episode> for crate::types::Episode {
     async fn try_from_with_store(
         episode: Episode,
         store: &mut wasmtime::Store<WasmState>,
@@ -168,7 +168,7 @@ impl AsyncTryFromWithStore<Episode> for crate::types::Episode {
     }
 }
 
-impl AsyncTryFromWithStore<Video> for crate::types::Video {
+impl TryFromWithStore<Video> for crate::types::Video {
     async fn try_from_with_store(
         video: Video,
         store: &mut wasmtime::Store<WasmState>,
@@ -181,7 +181,7 @@ impl AsyncTryFromWithStore<Video> for crate::types::Video {
     }
 }
 
-impl AsyncTryFromWithStore<Resource<HostOutgoingRequest>> for HostOutgoingRequest {
+impl TryFromWithStore<Resource<HostOutgoingRequest>> for HostOutgoingRequest {
     async fn try_from_with_store(
         resource: Resource<HostOutgoingRequest>,
         store: &mut wasmtime::Store<WasmState>,
@@ -192,7 +192,7 @@ impl AsyncTryFromWithStore<Resource<HostOutgoingRequest>> for HostOutgoingReques
     }
 }
 
-impl AsyncTryFromWithStore<MediaResource> for crate::types::MediaResource {
+impl TryFromWithStore<MediaResource> for crate::types::MediaResource {
     async fn try_from_with_store(
         media_resource: MediaResource,
         store: &mut wasmtime::Store<WasmState>,
@@ -258,7 +258,7 @@ impl From<EntryDetails> for crate::types::EntryDetails {
     }
 }
 
-impl AsyncTryFromWithStore<Entry> for crate::types::Entry {
+impl TryFromWithStore<Entry> for crate::types::Entry {
     async fn try_from_with_store(
         entry: Entry,
         store: &mut wasmtime::Store<WasmState>,
@@ -271,7 +271,7 @@ impl AsyncTryFromWithStore<Entry> for crate::types::Entry {
     }
 }
 
-impl AsyncTryFromWithStore<EntriesPage> for crate::types::EntriesPage {
+impl TryFromWithStore<EntriesPage> for crate::types::EntriesPage {
     async fn try_from_with_store(
         page: EntriesPage,
         store: &mut wasmtime::Store<WasmState>,

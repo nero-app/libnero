@@ -65,7 +65,7 @@ impl WasmHost {
         }
     }
 
-    pub async fn load_extension_async<P: AsRef<Path>>(
+    pub async fn load_extension<P: AsRef<Path>>(
         &self,
         path: P,
         options: ExtensionOptions,
@@ -80,8 +80,7 @@ impl WasmHost {
             Payload::Module(..) => unreachable!(),
         };
 
-        let extension =
-            WasmExtension::instantiate_async(version, &component, metadata, options.into()).await?;
+        let extension = WasmExtension::instantiate(version, &component, metadata, options.into())?;
 
         Ok(extension)
     }
