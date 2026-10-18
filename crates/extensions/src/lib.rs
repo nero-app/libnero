@@ -7,11 +7,8 @@ pub use extension::WasmExtension;
 pub use host::{ExtensionOptions, WasmHost};
 pub use wasm_metadata::Metadata;
 
-pub use nero_keyvalue_ttl::{Bucket, Error as StoreError, KeyResponse, Store};
-pub use nero_portal::{
-    CallbackTransport, Cancel, ChoiceItem, Delivery, Interaction, ListenError, Opener,
-    ProgressHandle, SelectionRequest, Severity, TextRequest,
-};
+pub use nero_keyvalue_ttl as keyvalue_ttl;
+pub use nero_portal as portal;
 
 use anyhow::Result;
 
