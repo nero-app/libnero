@@ -10,7 +10,7 @@ use wasmtime_wasi::{ResourceTable, WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
 
 use crate::{
-    Extension, Tracker,
+    Extractor, Tracker,
     types::{
         EntriesPage, Entry, EntryDetails, EpisodesPage, FilterCategory, SearchFilter, Series,
         SeriesPage, Video, WatchStatus,
@@ -141,16 +141,16 @@ impl WasmExtension {
         )
     }
 
+    pub fn metadata(&self) -> Arc<Metadata> {
+        self.metadata.clone()
+    }
+
     pub fn supports_tracker(&self) -> bool {
         self.supports_tracker
     }
 }
 
-impl Extension for WasmExtension {
-    fn metadata(&self) -> Arc<Metadata> {
-        self.metadata.clone()
-    }
-
+impl Extractor for WasmExtension {
     async fn filters(&self) -> Result<Vec<FilterCategory>> {
         let mut store = Store::new(
             self.extension_pre.engine(),

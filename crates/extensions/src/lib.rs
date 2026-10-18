@@ -3,8 +3,6 @@ mod host;
 pub mod types;
 mod wit;
 
-use std::sync::Arc;
-
 pub use extension::WasmExtension;
 pub use host::{ExtensionOptions, WasmHost};
 pub use wasm_metadata::Metadata;
@@ -25,9 +23,7 @@ use crate::{
     wit::AsyncTryIntoWithStore,
 };
 
-pub trait Extension {
-    fn metadata(&self) -> Arc<Metadata>;
-
+pub trait Extractor {
     fn filters(&self) -> impl std::future::Future<Output = Result<Vec<FilterCategory>>>;
 
     fn search(
