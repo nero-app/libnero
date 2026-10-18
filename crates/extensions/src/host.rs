@@ -56,8 +56,8 @@ impl Default for WasmHost {
 }
 
 impl WasmHost {
-    pub async fn inspect(path: impl AsRef<Path>) -> anyhow::Result<Metadata> {
-        let bytes = tokio::fs::read(path).await?;
+    pub fn inspect(path: impl AsRef<Path>) -> anyhow::Result<Metadata> {
+        let bytes = std::fs::read(path)?;
 
         match Payload::from_binary(&bytes)? {
             Payload::Component { metadata, .. } => Ok(metadata),
@@ -65,7 +65,7 @@ impl WasmHost {
         }
     }
 
-    pub async fn load_extension<P: AsRef<Path>>(
+    pub fn load_extension<P: AsRef<Path>>(
         &self,
         path: P,
         options: ExtensionOptions,
@@ -74,7 +74,7 @@ impl WasmHost {
 
         let wasm_bytes = std::fs::read(path)?;
         let version = WasmExtension::get_version(&wasm_bytes)?;
-        let component = Component::from_file(&self.engine, path)?;
+        let component = Component::new(&self.engine, &wasm_bytes)?;
         let metadata = match Payload::from_binary(&wasm_bytes)? {
             Payload::Component { metadata, .. } => metadata,
             Payload::Module(..) => unreachable!(),
