@@ -8,14 +8,24 @@ pub enum MediaResource {
     MagnetUri(String),
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Page<T> {
     pub items: Vec<T>,
     pub cursor: Option<String>,
 }
 
+impl<T> Default for Page<T> {
+    fn default() -> Self {
+        Self {
+            items: Vec::new(),
+            cursor: None,
+        }
+    }
+}
+
 pub type SeriesPage = Page<Series>;
 pub type EpisodesPage = Page<Episode>;
+pub type EntriesPage = Page<Entry>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WatchStatus {
@@ -41,13 +51,7 @@ pub struct Entry {
     pub details: EntryDetails,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct EntriesPage {
-    pub items: Vec<Entry>,
-    pub cursor: Option<String>,
-}
-
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Series {
     pub id: String,
     pub title: String,
@@ -56,7 +60,7 @@ pub struct Series {
     pub r#type: Option<String>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Episode {
     pub id: String,
     pub number: u16,
@@ -74,20 +78,20 @@ pub struct Video {
     pub resolution: Resolution,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Filter {
     pub id: String,
     pub display_name: String,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FilterCategory {
     pub id: String,
     pub display_name: String,
     pub filters: Vec<Filter>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SearchFilter {
     pub id: String,
     pub values: Vec<String>,
