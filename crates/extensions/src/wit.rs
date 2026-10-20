@@ -96,7 +96,9 @@ impl ExtensionPre {
         }
     }
 
+    #[tracing::instrument(level = "trace", skip_all)]
     pub(super) async fn instantiate(&self, store: &mut Store<WasmState>) -> Result<Extension> {
+        tracing::trace!("instantiating component");
         match self {
             ExtensionPre::V0_1_0_DRAFT(pre) => {
                 let instance = pre.instance_pre().instantiate_async(&mut *store).await?;

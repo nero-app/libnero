@@ -11,7 +11,7 @@ mod generated {
     wasmtime::component::bindgen!({
         path: "wit",
         world: "nero:keyvalue-ttl/imports",
-        imports: { default: async | trappable },
+        imports: { default: async | trappable | tracing },
         with: {
             "nero:keyvalue-ttl/store/bucket": crate::OpenBucket,
         },

@@ -148,9 +148,16 @@ impl WasmExtension {
     pub fn supports_tracker(&self) -> bool {
         self.supports_tracker
     }
+
+    fn identifier(&self) -> Option<String> {
+        let name = self.metadata.name.as_deref()?;
+        let version = self.metadata.version.as_ref()?;
+        Some(format!("{name}@{version}"))
+    }
 }
 
 impl Extractor for WasmExtension {
+    #[tracing::instrument(skip(self), fields(extension = self.identifier()), err)]
     async fn filters(&self) -> Result<Vec<FilterCategory>> {
         let mut store = Store::new(
             self.extension_pre.engine(),
@@ -161,6 +168,7 @@ impl Extractor for WasmExtension {
         extension.filters(store).await
     }
 
+    #[tracing::instrument(skip(self), fields(extension = self.identifier()), err)]
     async fn search(
         &self,
         query: &str,
@@ -176,6 +184,7 @@ impl Extractor for WasmExtension {
         extension.search(store, query, cursor, filters).await
     }
 
+    #[tracing::instrument(skip(self), fields(extension = self.identifier()), err)]
     async fn get_series_info(&self, series_id: &str) -> Result<Series> {
         let mut store = Store::new(
             self.extension_pre.engine(),
@@ -186,6 +195,7 @@ impl Extractor for WasmExtension {
         extension.get_series_info(store, series_id).await
     }
 
+    #[tracing::instrument(skip(self), fields(extension = self.identifier()), err)]
     async fn get_series_episodes(
         &self,
         series_id: &str,
@@ -202,6 +212,7 @@ impl Extractor for WasmExtension {
             .await
     }
 
+    #[tracing::instrument(skip(self), fields(extension = self.identifier()), err)]
     async fn get_series_videos(&self, series_id: &str, episode_id: &str) -> Result<Vec<Video>> {
         let mut store = Store::new(
             self.extension_pre.engine(),
@@ -216,6 +227,7 @@ impl Extractor for WasmExtension {
 }
 
 impl Tracker for WasmExtension {
+    #[tracing::instrument(skip(self), fields(extension = self.identifier()), err)]
     async fn list_entries(&self, status: WatchStatus, cursor: Option<&str>) -> Result<EntriesPage> {
         let mut store = Store::new(
             self.extension_pre.engine(),
@@ -225,6 +237,7 @@ impl Tracker for WasmExtension {
         extension.list_entries(store, status, cursor).await
     }
 
+    #[tracing::instrument(skip(self), fields(extension = self.identifier()), err)]
     async fn get_entry(&self, series_id: &str) -> Result<Option<Entry>> {
         let mut store = Store::new(
             self.extension_pre.engine(),
@@ -234,6 +247,11 @@ impl Tracker for WasmExtension {
         extension.get_entry(store, series_id).await
     }
 
+    #[tracing::instrument(
+        skip(self, details),
+        fields(extension = self.identifier(), progress = details.progress, score = details.score, repeat_count = details.repeat_count),
+        err
+    )]
     async fn save_entry(
         &self,
         series_id: &str,
@@ -250,6 +268,7 @@ impl Tracker for WasmExtension {
             .await
     }
 
+    #[tracing::instrument(skip(self), fields(extension = self.identifier()), err)]
     async fn remove_entry(&self, series_id: &str) -> Result<()> {
         let mut store = Store::new(
             self.extension_pre.engine(),

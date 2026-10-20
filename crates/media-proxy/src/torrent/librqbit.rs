@@ -18,6 +18,7 @@ impl RqbitTorrentBackend {
         }
     }
 
+    #[tracing::instrument(level = "trace", skip_all)]
     async fn resolve_torrent_source(
         &self,
         source: TorrentSource,
@@ -29,16 +30,27 @@ impl RqbitTorrentBackend {
                 request.headers_mut().remove_hop_by_hop_headers();
                 let req = request.into_reqwest_request(self.client.clone())?;
 
-                let bytes = self.client.execute(req).await?.bytes().await?;
+                tracing::debug!(host = req.url().host_str(), "fetching torrent metadata");
+                let response = self.client.execute(req).await?;
+                tracing::debug!(
+                    status = response.status().as_u16(),
+                    "received torrent metadata response"
+                );
+                let bytes = response.bytes().await?;
+                tracing::debug!(bytes = bytes.len(), "torrent metadata read");
                 Ok(librqbit::AddTorrent::from_bytes(bytes.to_vec()))
             }
-            TorrentSource::MagnetUri(uri) => Ok(librqbit::AddTorrent::from_url(uri)),
+            TorrentSource::MagnetUri(uri) => {
+                tracing::debug!("resolving magnet URI");
+                Ok(librqbit::AddTorrent::from_url(uri))
+            }
         }
     }
 }
 
 #[async_trait::async_trait]
 impl TorrentBackend for RqbitTorrentBackend {
+    #[tracing::instrument(level = "debug", skip_all, err(level = "debug"))]
     async fn list_files(&self, source: &TorrentSource) -> Result<Vec<TorrentFile>> {
         use librqbit::{AddTorrent, AddTorrentOptions};
 
@@ -52,6 +64,7 @@ impl TorrentBackend for RqbitTorrentBackend {
             list_only: true,
             ..Default::default()
         };
+        tracing::debug!("listing torrent files");
         let response = self
             .api
             .api_add_torrent(AddTorrent::from_url(uri), Some(options))
@@ -75,9 +88,11 @@ impl TorrentBackend for RqbitTorrentBackend {
             anyhow::bail!("No valid files found in torrent")
         }
 
+        tracing::debug!(count = files.len(), "torrent files listed");
         Ok(files)
     }
 
+    #[tracing::instrument(level = "debug", skip(self, source), err(level = "debug"))]
     async fn add_torrent(
         &self,
         source: TorrentSource,
@@ -85,6 +100,7 @@ impl TorrentBackend for RqbitTorrentBackend {
     ) -> Result<Torrent> {
         use librqbit::AddTorrentOptions;
 
+        tracing::debug!("adding torrent to session");
         let add_torrent = self.resolve_torrent_source(source).await?;
 
         let options = match options {
@@ -117,16 +133,19 @@ impl TorrentBackend for RqbitTorrentBackend {
             return Err(anyhow::anyhow!("No valid files were included in torrent"));
         }
 
-        Ok(Torrent {
+        let torrent = Torrent {
             id: added
                 .id
                 .ok_or(anyhow::anyhow!("Torrent ID not available"))?
                 .to_string(),
             name: added.details.name,
             files,
-        })
+        };
+        tracing::debug!(torrent_id = %torrent.id, files = torrent.files.len(), "torrent added to session");
+        Ok(torrent)
     }
 
+    #[tracing::instrument(level = "trace", skip(self, request))]
     async fn handle_stream_request(
         &self,
         torrent_id: &str,
@@ -145,6 +164,7 @@ impl TorrentBackend for RqbitTorrentBackend {
         let mut stream = self.api.api_stream(torrent_id, file_index)?;
 
         let total_len = stream.len();
+        tracing::trace!(total_len, "opened torrent file stream");
         let mut status = StatusCode::OK;
         let mut response_headers = HeaderMap::new();
 
@@ -172,6 +192,7 @@ impl TorrentBackend for RqbitTorrentBackend {
 
             let end = end.unwrap_or(total_len);
             let len = end - start;
+            tracing::trace!(start, end, bytes = len, "serving torrent byte range");
 
             response_headers.insert(
                 http::header::CONTENT_RANGE,
@@ -187,6 +208,7 @@ impl TorrentBackend for RqbitTorrentBackend {
 
             Box::new(stream.take(len))
         } else {
+            tracing::trace!(bytes = total_len, "serving complete torrent file");
             response_headers.insert(
                 http::header::CONTENT_LENGTH,
                 total_len.to_string().parse().unwrap(),
@@ -209,11 +231,14 @@ impl TorrentBackend for RqbitTorrentBackend {
         Ok(builder.body(body).unwrap())
     }
 
+    #[tracing::instrument(level = "debug", skip_all, fields(torrent_id = torrent), err(level = "debug"))]
     async fn cancel_torrent(&self, torrent: &str) -> Result<()> {
         use librqbit::api::TorrentIdOrHash;
 
         let idx = TorrentIdOrHash::Id(torrent.parse()?);
+        tracing::debug!("removing torrent from session");
         self.api.api_torrent_action_delete(idx).await?;
+        tracing::debug!("torrent removed from session");
 
         Ok(())
     }

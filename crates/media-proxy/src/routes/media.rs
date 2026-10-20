@@ -14,11 +14,17 @@ use crate::{
     utils::{HopByHopHeadersExt, IntoReqwestRequest},
 };
 
+#[tracing::instrument(
+    level = "debug", skip_all,
+    fields(%resource_id, method = %incoming_request.method(), range = ?incoming_request.headers().get(http::header::RANGE)),
+    err(level = "warn")
+)]
 pub(crate) async fn handle_media_request(
     State(state): State<Arc<ServerState>>,
     Path(resource_id): Path<String>,
     incoming_request: axum::extract::Request,
 ) -> Result<Response, Error> {
+    tracing::debug!("serving media request");
     let resource = state
         .resources
         .read()
@@ -27,7 +33,7 @@ pub(crate) async fn handle_media_request(
         .cloned()
         .ok_or(Error::NotFound)?;
 
-    match resource {
+    let response = match resource {
         Resource::Http(stored_request) => {
             handle_http_request(state, stored_request, incoming_request).await
         }
@@ -35,9 +41,15 @@ pub(crate) async fn handle_media_request(
         Resource::Torrent(source) => {
             super::torrent::handle_torrent_resource(state, resource_id, source).await
         }
-    }
+    }?;
+    tracing::debug!(status = response.status().as_u16(), "media response ready");
+    Ok(response)
 }
 
+#[tracing::instrument(
+    level = "debug", skip_all,
+    fields(method = %stored_request.method(), host = stored_request.uri().host(), path = stored_request.uri().path())
+)]
 async fn handle_http_request(
     state: Arc<ServerState>,
     mut stored_request: Box<crate::HttpRequest>,
@@ -54,10 +66,18 @@ async fn handle_http_request(
 
     stored_request.headers_mut().remove_hop_by_hop_headers();
 
+    tracing::debug!("sending HTTP request");
     let request = stored_request.into_reqwest_request(state.http_client.clone())?;
     let response = state.http_client.execute(request).await?;
 
     let status = response.status();
+    tracing::debug!(status = status.as_u16(), "received HTTP response");
+    if status.is_client_error() || status.is_server_error() {
+        tracing::warn!(
+            status = status.as_u16(),
+            "upstream returned an unsuccessful status"
+        );
+    }
     let mut headers = response.headers().clone();
     headers.remove_hop_by_hop_headers();
 

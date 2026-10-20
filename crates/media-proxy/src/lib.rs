@@ -73,8 +73,18 @@ impl MediaProxy {
         }
     }
 
+    #[tracing::instrument(level = "debug", skip_all, fields(resource_id))]
     pub async fn register(&self, id: impl Into<String>, resource: Resource) -> MediaReference {
         let id = id.into();
+        tracing::Span::current().record("resource_id", &id);
+        tracing::debug!(
+            resource_type = match &resource {
+                Resource::Http(_) => "http",
+                #[cfg(feature = "torrent")]
+                Resource::Torrent(_) => "torrent",
+            },
+            "registering media resource"
+        );
 
         #[cfg(feature = "torrent")]
         {
@@ -91,23 +101,30 @@ impl MediaProxy {
         MediaReference::new(id)
     }
 
+    #[tracing::instrument(level = "debug", skip_all, fields(resource_id = id))]
     pub async fn unregister(&self, id: &str) -> Option<Resource> {
         let resource = self.state.resources.write().await.remove(id);
 
         #[cfg(feature = "torrent")]
         self.release_torrent(id).await;
 
+        tracing::debug!(found = resource.is_some(), "media resource unregistered");
         resource
     }
 
     #[cfg(feature = "torrent")]
+    #[tracing::instrument(level = "debug", skip(self))]
     async fn release_torrent(&self, resource_id: &str) {
         let torrent = self.state.active_torrents.write().await.remove(resource_id);
 
-        if let Some(torrent) = torrent
-            && let Err(error) = self.state.torrent_backend.cancel_torrent(&torrent.id).await
-        {
-            tracing::warn!(%error, %resource_id, "failed to release torrent resource");
+        if let Some(torrent) = torrent {
+            tracing::debug!(torrent_id = %torrent.id, "releasing torrent");
+            match self.state.torrent_backend.cancel_torrent(&torrent.id).await {
+                Ok(()) => tracing::debug!(torrent_id = %torrent.id, "torrent released"),
+                Err(error) => {
+                    tracing::warn!(%error, torrent_id = %torrent.id, "failed to release torrent")
+                }
+            }
         }
     }
 

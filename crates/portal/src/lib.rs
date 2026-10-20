@@ -61,10 +61,10 @@ pub trait CallbackTransport: Send + Sync {
     fn register(&self, delivery: Delivery) -> Result<String, ListenError>;
 }
 
-#[derive(Default)]
 struct CancelState {
     flagged: AtomicBool,
     notify: Notify,
+    span: tracing::Span,
 }
 
 #[derive(Clone)]
@@ -72,6 +72,7 @@ pub struct Cancel(Arc<CancelState>);
 
 impl Cancel {
     pub fn cancel(&self) {
+        tracing::debug!(parent: &self.0.span, "progress cancellation requested");
         self.0.flagged.store(true, Ordering::SeqCst);
         self.0.notify.notify_waiters();
     }
@@ -91,14 +92,19 @@ impl From<ResourceTableError> for ListenError {
 
 type Outcome = Option<Result<String, String>>;
 
-pub struct Delivery(watch::Sender<Outcome>);
+pub struct Delivery(watch::Sender<Outcome>, tracing::Span);
 
 impl Delivery {
     pub fn deliver(self, uri: String) {
-        let _ = self.0.send(Some(Ok(uri)));
+        if self.0.send(Some(Ok(uri))).is_ok() {
+            tracing::debug!(parent: &self.1, "callback delivered");
+        } else {
+            tracing::debug!(parent: &self.1, "callback listener was dropped before delivery");
+        }
     }
 
     pub fn fail(self, reason: String) {
+        tracing::warn!(parent: &self.1, %reason, "callback transport failed");
         let _ = self.0.send(Some(Err(reason)));
     }
 
@@ -193,18 +199,35 @@ impl<'a> Portal<'a> {
 }
 
 impl portal::interaction::Host for Portal<'_> {
+    #[tracing::instrument(level = "trace", skip_all, fields(sensitive = request.sensitive))]
     async fn request_text(&mut self, request: TextRequest) -> Result<Option<String>> {
-        Ok(self.ctx.interaction.request_text(request).await)
+        tracing::trace!("call");
+        let answer = self.ctx.interaction.request_text(request).await;
+        tracing::trace!(answered = answer.is_some(), "return");
+        Ok(answer)
     }
 
+    #[tracing::instrument(
+        level = "trace", skip_all,
+        fields(choices = request.choices.len(), allow_multiple = request.allow_multiple),
+        err(level = "warn")
+    )]
     async fn request_selection(&mut self, request: SelectionRequest) -> Result<Option<Vec<u32>>> {
+        tracing::trace!("call");
         if request.choices.is_empty() {
             anyhow::bail!("selection requests must contain at least one choice");
         }
 
-        Ok(self.ctx.interaction.request_selection(request).await)
+        let answer = self.ctx.interaction.request_selection(request).await;
+        tracing::trace!(
+            answered = answer.is_some(),
+            selected = answer.as_ref().map(Vec::len),
+            "return"
+        );
+        Ok(answer)
     }
 
+    #[tracing::instrument(level = "trace", skip(self, message, detail))]
     async fn notify(
         &mut self,
         severity: Severity,
@@ -212,13 +235,26 @@ impl portal::interaction::Host for Portal<'_> {
         detail: Option<String>,
     ) -> Result<()> {
         self.ctx.interaction.notify(severity, message, detail);
+        tracing::trace!("notification submitted");
         Ok(())
     }
 }
 
 impl portal::interaction::HostProgress for Portal<'_> {
+    #[tracing::instrument(
+        name = "begin_progress",
+        level = "trace",
+        skip(self, title),
+        fields(progress),
+        err(level = "warn")
+    )]
     async fn new(&mut self, title: String, cancellable: bool) -> Result<Resource<Progress>> {
-        let cancel = Arc::new(CancelState::default());
+        tracing::trace!("call");
+        let cancel = Arc::new(CancelState {
+            flagged: AtomicBool::new(false),
+            notify: Notify::new(),
+            span: tracing::Span::current(),
+        });
         let Some(handle) =
             self.ctx
                 .interaction
@@ -227,9 +263,13 @@ impl portal::interaction::HostProgress for Portal<'_> {
             anyhow::bail!("progress request was rejected by the host");
         };
 
-        Ok(self.table.push(Progress { handle, cancel })?)
+        let progress = self.table.push(Progress { handle, cancel })?;
+        tracing::Span::current().record("progress", progress.rep());
+        tracing::trace!("return");
+        Ok(progress)
     }
 
+    #[tracing::instrument(level = "trace", skip(self, this, message), fields(progress = this.rep()), err)]
     async fn report(
         &mut self,
         this: Resource<Progress>,
@@ -237,27 +277,37 @@ impl portal::interaction::HostProgress for Portal<'_> {
         percent: Option<u8>,
     ) -> Result<()> {
         self.table.get(&this)?.handle.report(message, percent);
+        tracing::trace!("progress updated");
         Ok(())
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(progress = this.rep()), err)]
     async fn subscribe_cancellation(
         &mut self,
         this: Resource<Progress>,
     ) -> Result<Resource<DynPollable>> {
         let cancel = Arc::clone(&self.table.get(&this)?.cancel);
         let cancellation = self.table.push_child(Cancellation { cancel }, &this)?;
-        subscribe(self.table, cancellation)
+        let pollable = subscribe(self.table, cancellation)?;
+        tracing::trace!("subscribed to progress cancellation");
+        Ok(pollable)
     }
 
+    #[tracing::instrument(name = "drop_progress", level = "trace", skip_all, fields(progress = this.rep()), err)]
     async fn drop(&mut self, this: Resource<Progress>) -> Result<()> {
         self.table.delete(this)?;
+        tracing::trace!("progress operation dropped");
         Ok(())
     }
 }
 
 impl portal::opener::Host for Portal<'_> {
+    #[tracing::instrument(level = "trace", skip_all, fields(scheme = uri.split_once(':').map(|(scheme, _)| scheme)))]
     async fn open(&mut self, uri: String) -> Result<bool> {
-        Ok(self.ctx.opener.open(&uri).await)
+        tracing::trace!("call");
+        let opened = self.ctx.opener.open(&uri).await;
+        tracing::trace!(opened, "return");
+        Ok(opened)
     }
 }
 
@@ -271,22 +321,31 @@ impl portal::callback::Host for Portal<'_> {
 }
 
 impl portal::callback::HostListener for Portal<'_> {
+    #[tracing::instrument(level = "trace", skip_all, fields(timeout_ns = timeout, listener), err(Debug, level = "debug"))]
     async fn listen(&mut self, timeout: u64) -> Result<Resource<Listener>, ListenError> {
+        tracing::trace!("call");
         let (tx, rx) = watch::channel(None);
-        let address = self.ctx.callbacks.register(Delivery(tx))?;
+        let address = self
+            .ctx
+            .callbacks
+            .register(Delivery(tx, tracing::Span::current()))?;
 
-        Ok(self.table.push(Listener {
+        let listener = self.table.push(Listener {
             address,
             rx,
             deadline: Instant::now().checked_add(Duration::from_nanos(timeout)),
             taken: false,
-        })?)
+        })?;
+        tracing::Span::current().record("listener", listener.rep());
+        tracing::trace!("return");
+        Ok(listener)
     }
 
     async fn address(&mut self, this: Resource<Listener>) -> Result<String> {
         Ok(self.table.get(&this)?.address.clone())
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(listener = this.rep()), err)]
     async fn subscribe(&mut self, this: Resource<Listener>) -> Result<Resource<DynPollable>> {
         let listener = self.table.get(&this)?;
         let arrival = Arrival {
@@ -294,9 +353,12 @@ impl portal::callback::HostListener for Portal<'_> {
             deadline: listener.deadline,
         };
         let arrival = self.table.push_child(arrival, &this)?;
-        subscribe(self.table, arrival)
+        let pollable = subscribe(self.table, arrival)?;
+        tracing::trace!("subscribed to callback arrival");
+        Ok(pollable)
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(listener = this.rep()), err)]
     async fn get(
         &mut self,
         this: Resource<Listener>,
@@ -304,6 +366,7 @@ impl portal::callback::HostListener for Portal<'_> {
         let listener = self.table.get_mut(&this)?;
 
         if listener.taken {
+            tracing::trace!("callback result already consumed");
             return Ok(Some(Err(())));
         }
 
@@ -311,19 +374,27 @@ impl portal::callback::HostListener for Portal<'_> {
         if let Some(outcome) = outcome {
             listener.taken = true;
             return Ok(Some(Ok(match outcome {
-                Ok(uri) => Ok(uri),
-                Err(reason) => Err(portal::callback::ReceiveError::Other(reason)),
+                Ok(uri) => {
+                    tracing::debug!("callback received");
+                    Ok(uri)
+                }
+                Err(reason) => {
+                    tracing::debug!("callback listener received a transport failure");
+                    Err(portal::callback::ReceiveError::Other(reason))
+                }
             })));
         }
 
         let abandoned = listener.rx.has_changed().is_err();
         let expired = listener.deadline.is_some_and(|d| Instant::now() >= d);
         if expired {
+            tracing::debug!("callback listener expired");
             listener.taken = true;
             return Ok(Some(Ok(Err(portal::callback::ReceiveError::Expired))));
         }
 
         if abandoned {
+            tracing::warn!("callback transport closed without a result");
             listener.taken = true;
             return Ok(Some(Ok(Err(portal::callback::ReceiveError::Other(
                 "callback transport closed".into(),
@@ -333,8 +404,10 @@ impl portal::callback::HostListener for Portal<'_> {
         Ok(None)
     }
 
+    #[tracing::instrument(name = "drop_listener", level = "trace", skip_all, fields(listener = this.rep()), err)]
     async fn drop(&mut self, this: Resource<Listener>) -> Result<()> {
         self.table.delete(this)?;
+        tracing::trace!("callback listener dropped");
         Ok(())
     }
 }

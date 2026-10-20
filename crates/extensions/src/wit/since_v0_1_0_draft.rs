@@ -34,7 +34,7 @@ bindgen!({
     path: "./wit/v0.1.0-draft",
     world: "nero:extension/extension",
     imports: { default: async | trappable, },
-    exports: { default: async },
+    exports: { default: async | tracing },
     with: {
         "wasi:http/types/outgoing-request": wasmtime_wasi_http::types::HostOutgoingRequest,
     },
@@ -46,7 +46,7 @@ mod tracker {
     bindgen!({
         path: "./wit/v0.1.0-draft",
         interfaces: "export nero:extension/tracker@0.1.0-draft-2026-10-15;",
-        exports: { default: async },
+        exports: { default: async | tracing },
         with: {
             "nero:extension/types@0.1.0-draft-2026-10-15": super::nero::extension::types,
         },
